@@ -4,17 +4,17 @@ This repository contains R code for carrying out imaging mass cytometry on gliob
 
 ## Table of Contents
 
--   [Introduction](#introduction)
--   [Installation](#installation)
--   [Usage](#usage)
+-   [Introduction](#Introduction)
+-   [Installation](#Installation)
+-   [Usage](#Usage)
 
-## Introduction {#introduction}
+## Introduction
 
 Glioblastoma (GBM) is an aggressive type of cancer that occurs in the brain or spinal cord. Imaging mass cytometry is a powerful technique that combines mass spectrometry and microscopy to analyse the spatial distribution of proteins and other molecules within tissue sections.
 
 This project provides R scripts and data for performing imaging mass cytometry analysis on GBM tumour samples. The analysis includes data preprocessing, visualization, and statistical analysis.
 
-## Installation {#installation}
+## Installation
 
 ### Prerequisites
 
@@ -41,7 +41,7 @@ renv::restore()
 
 This will install all the necessary packages specified in the renv.lock file.
 
-## Usage {#usage}
+## Usage
 
 ### Running the Analysis
 
