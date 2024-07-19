@@ -6,11 +6,11 @@ data/
 # output files
 outputs/
 
+# deprecated scripts
+process/Downstream/Depracated/
+
 # misc files
 misc/
-
-# Deprecated process scripts
-Process/Deprecated
 
 # VS Code files
 .vscode/
