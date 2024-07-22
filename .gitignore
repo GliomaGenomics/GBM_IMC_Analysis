@@ -10,7 +10,7 @@ outputs/
 process/Downstream/Depracated/
 
 # misc files
-misc/
+misc_info/
 
 # VS Code files
 .vscode/
