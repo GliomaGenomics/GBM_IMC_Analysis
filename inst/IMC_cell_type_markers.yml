@@ -1,0 +1,61 @@
+cell_types:
+  Immune:
+    Pan-Immune:
+      - CD45
+    Lymphoid: 
+      T cells:
+        - CD3
+        - CD8
+      NK cells:
+        - CD56
+        - NKP46
+    Myeloid:
+      Macrophage:
+        - IBA1
+      Microglia:
+        - TMEM119
+        - P2Y12R
+  Tumour:
+    AC:
+      - SLC1A3_EAAT1
+      - HOPX
+    MES:
+      - SOD2
+      - CHI3L1
+      - ANEXIN_A2
+      - ANXA1
+    NPC:
+      - DLL3
+      - BCAN
+    OPC:
+      - SCD5
+      - OLIG1
+  Stroma:
+    Neuron:
+      - NeuN_FOX3
+      - CD56
+    Astrocyte:
+      - GFAP
+    Oligodendrocytes:
+      - MOG
+    Endothelial:
+      - CD31
+      - SMA
+cell_states:
+  JARID2_Activating:
+    - JARID2_C_Terminus
+  JARID2_Repressive:
+    - JARID2_N_Terminus
+  Proliferating:
+    - Ki67
+  Hypoxia:
+    - HIF1A
+  Transcriptionally_respressive:
+    - EZH2
+  Epithelial_mesenchymal_transition:
+    - SNAI1
+  Proliferating_stem_cell:
+    - SOX2
+  Quiescent_stem_cell:
+    - TNC
+    - TGFBeta

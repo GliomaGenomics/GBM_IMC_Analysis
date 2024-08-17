@@ -1,0 +1,24 @@
+idap imc
+Machine learning segmentation
+Stardist
+Miriam 
+
+I-DAPI - DAPI with 127-iodine
+from Mark Nitz's alb
+Rebecca Ihrie to Everyone (1:36 pm)
+https://github.com/stardist/stardist
+https://pubmed.ncbi.nlm.nih.gov/35084791/
+
+MEM = Marker Enrichment Modeling
+https://pubmed.ncbi.nlm.nih.gov/29345329/
+
+Flows
+
+UMAP/t-SNE -> FlowSOM -> MEM
+
+Maybe T-REX after that
+
+
+CODEX (from Nolan lab) has a neighborhood analysis, as does HistoCat
+
+

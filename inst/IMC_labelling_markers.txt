@@ -1,0 +1,61 @@
+cell_states:
+  JARID2_ACTIVATING:
+    - JARID2_C_Terminus
+  JARID2_REPRESSIVE:
+    - JARID2_N_Terminus
+  PROLIFERATING:
+    - Ki67
+  HYPOXIA:
+    - HIF1A
+  TRANSCRIPTIONALLY_REPRESSIVE:
+    - EZH2
+  EPITHELIAL_MESENCHYMAL_TRANSITION:
+    - SNAI1
+  PROLIFERATING_STEM_CELL:
+    - SOX2
+  QUIESCENT_STEM_CELL:
+    - TNC
+    - TGFBeta
+    
+cell_types:
+  T cells:
+    - CD45
+    - CD3
+    - CD8
+  NK cells:
+    - CD45
+    - CD56
+    - NKP46
+  Macrophage:
+    - CD45
+    - IBA1
+  Microglia:
+    - CD45
+    - IBA1
+    - TMEM119
+    - P2Y12R
+  Endothelial:
+    - CD31
+    - SMA
+  AC:
+    - SLC1A3_EAAT1
+    - HOPX
+  MES:
+    - SOD2
+    - CHI3L1
+  MES_Hypoxia:
+    - ANEXIN_A2
+    - ANXA1
+  NPC:
+    - DLL3
+    - BCAN
+  OPC:
+    - SCD5
+    - OLIG1
+  Neuron:
+    - NeuN_FOX3
+    - CD56
+  Astrocyte:
+    - GFAP
+  Oligodendrocytes:
+    - MOG

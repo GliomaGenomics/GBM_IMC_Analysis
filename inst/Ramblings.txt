@@ -1,0 +1,130 @@
+The downstream spatial experiment object contains two assays, counts and exprs which correspond to the raw isotope abundances and the transformed (inverse hyperbolic sine, co-factor 5) counts, respectively. Both of these assays were corrected for spillover effects (see script 2_Spillover_Correction) and in the later downstream analysis are have the same names.
+
+    
+
+spatial communities split by primary vs recurrent
+spatial communities split by regions where possible 
+
+
+Proneural subtypes are more common in young patients, less pathological compared with proliferative or interstitial GBM and have a better prognosis.
+
+
+IvyGAP - used laser capture microdissection to carefully delineate and individually generate niche-specific transcriptome of the five major histomorphologic features of glioblastoma:
+
+Cellular Tumour (CT)
+Infiltrating Region (IT) 
+Microvascular Proliferation (MVP)
+Tumour Cells around necrosis (PAN) 
+adjacent leading edge brain tissue (LE) 
+
+Microscopically, glioblastoma shows a reliable set of “hallmark” histomorphologic features that include 
+tumor areas of high cellularity (CT),
+brain infiltration (IT), 
+microvascular proliferation (MVP) and 
+hypoxia in which tumor cells form palisading structures around necrosis (PAN) in heterogenous quantities
+
+
+Previously the authors and other had aligned histomorphologic features to the four plastic cellular states of glioblastoma and found enrichment of MES signature in PAN tumour regions
+
+
+
+Manual Gating/labelling of cells:
+
+Labels will initially be split to separate out the following cell_types:
+
+Immune Cells (CD45+ AND): 
+				NK Cells (NKP46+)
+				T Cells (CD8+ OR CD3+)
+				NK T Cells (NKP46+ & CD8+ OR CD8+)
+				Microglia (IBA1+ & TMEM119+ OR P2Y12R+)
+				Macrophages (IBA1+ & TMEM119- OR P2Y12R-)
+				Monocytes (CD31+)
+
+Macrophage  Monocytes   NK_cells    T_cells  undefined      22366       2615       7076       8865      44174 
+
+
+Macrophage  Monocytes   NK_cells    T_cells  undefined      24457       2329       5502       6142      46666
+
+
+Malignant GBM Cells (CD45-):
+				MES (SOD2+ OR CHI3L1+)
+				MES_HYPOXIC (ANXA2+ OR ANXA1)
+				NPC (DLL3+ OR BCAN+)
+				AC (SLC1A3_EAAT1+ OR HOPX+)
+				OPC (OLIG1+ OR SCD5+)
+
+
+ AC       MES       NPC       OPC 	undefined  5316     26103       853      2378     41895 
+
+
+ AC       MES       NPC       OPC       undefined  9910     28676       288      1128     36543
+
+
+
+
+
+Brain Resident Cells (CD45-):
+				Neuron (CD56+ OR NEUN_FOX3+)
+				Astrocyte (GFAP+)
+				Oligodendrocyte (MOG+)
+				Endothelial/Vasculature (SMA OR CD31) 
+
+
+Cell States:
+				JARID2_Activating	(JARID2_C+)
+				JARID2_Repressive	(JARID2_N+)
+				Repressive 		(EZH2+)
+				Proliferative 		(SOX2+ OR KI67+)
+				Quiescence		(TNC+ OR TGFBeta+)
+				Hypoxia			(HIF1A+)
+				EMT			(SNAI1+)
+				
+
+
+
+
+Methodology Notes:
+
+RAW .mcd files exported from the MCD viewer were converted to multi-channel .tiff images using the Steinbeck "preprocess" command line tool from Steinbock0.13.5. The pixels were also hot-pixel filtered using the default recommended threshold of 50.
+Hot pixel filtering works by comparing each pixel to its 8-neighborhood (i.e., neighboring pixels at a Chebyshev distance of 1). If the difference (not: absolute difference) between the pixel and any of its 8 neighbor pixels exceeds a hot pixel filtering threshold, the pixel is set to the maximum neighbor pixel value ("hot pixel-filtered"). 
+
+
+
+
+docker run -it --name use-dice-xmbd \
+-v /Users/shoaibaliajaib/Desktop/Dice-XMBD/data/:/mnt/data \
+-v /Users/shoaibaliajaib/Desktop/Dice-XMBD/:/workspace/ \
+xiaoxu9907/dice-xmbd:latest /bin/bash
+
+
+
+python /workspace/process/1_preprocess_img.py --process pre --workdir '/mnt/data/test/' --panel '/mnt/data/panel/panel.csv'
+
+
+cellpose does not install easily on a m1 mac and therefore the following steps are required:
+
+
+To run cellpose on arm64:
+I first install Napari and pyqt and generate the environment
+
+conda create -y -n napari-env -c andfoy python=3.8 pyqt napari python.app
+
+Then you need imagecodecs…
+
+conda install -c conda-forge imagecodecs
+
+Then cellpose…
+
+python -m pip install cellpose
+
+
+
+When running Astir it seems to be labelling large amount of cells as neurons which are expressing CD56 and Neun_Fox
+
+
+
+
+
+
+
+
