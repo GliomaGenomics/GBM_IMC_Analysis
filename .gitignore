@@ -10,7 +10,7 @@ outputs/
 process/Downstream/Depracated/
 
 # misc files
-misc_info/
+inst/
 
 # VS Code files
 .vscode/
@@ -45,3 +45,6 @@ misc_info/
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# renv dir
+renv/
