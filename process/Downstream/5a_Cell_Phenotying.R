@@ -178,7 +178,6 @@ visualise_clusters(object = spe,
                    )
 # CLUSTER EXPRESSION HEATMAP ---------------------------------------------------
 
-
 # Create the Heatmap Data
 heatmap_data = anno_expression(object = spe, 
                                assay = "exprs", 

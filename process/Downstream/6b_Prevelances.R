@@ -3,8 +3,8 @@
 # In order to do this we will first obtain counts for each of the cells and then 
 # subset/aggregate them to show the cell prevalence across different groupings.
 
-# Previously, i clustered and annotated the imaging mass cytometry single cells. 
-# During this process a number of cells remained unannotated as their 
+# Previously, I clustered and annotated the imaging mass cytometry single cells. 
+# During this process a number of cells remained un-annotated as their 
 # identity could not be easily inferred using one of more of the cell type markers 
 # which were used. Also, in some cases the abundance of the metal isotopes corresponding 
 # to the cell type markers was indiscriminate in distinguishing one particular cell 
