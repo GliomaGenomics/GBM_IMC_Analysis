@@ -358,6 +358,12 @@ rm(
   p1, p2
 )
 
+# SAVE DOWNSTREAM DATA ---------------------------------------------------------
+spe@metadata$v2_colours <- io$inputs$colors
+spe@metadata$labels <- io$inputs$labels
+
+saveRDS(spe, file = nf("spe_downstream.rds", io$output$temp_out))
+
 # REGION-TYPE CELL LABELS   ----------------------------------------------------
 count_anno_labels <- function(grouping_var, anno_label,
                               outcol = "cells",
