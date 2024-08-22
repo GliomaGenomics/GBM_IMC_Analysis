@@ -5,8 +5,8 @@
 
 # PACKAGES ---------------------------------------------------------------------
 library(SpatialExperiment)
-library(dittoSeq)
-library(imcRtools)
+# library(dittoSeq)
+# library(imcRtools)
 library(ggplot2)
 library(viridis)
 library(magrittr)
@@ -18,9 +18,8 @@ library(IMCfuncs)
 # I/O --------------------------------------------------------------------------
 io <- list(
   inputs = list(
-    functions = "process/Downstream/functions",
     comp_data = "data/downstream/compensated",
-    dim_reductions = "data/downstream/dim_reductions"
+    functions = "process/Downstream/functions"
   ),
   output = list(
     cell_pheno_out = "outputs/cell_phenotyping"
@@ -31,7 +30,6 @@ io <- list(
 # create the output directories (if they do not exist)
 ndirs(io$output$cell_pheno_out)
 io$output$temp_out <- nd(path = io$output$cell_pheno_out)
-
 
 # use the latest compensated, labelled data
 io$inputs$comp_spe <- list.files(io$inputs$comp_data,
@@ -77,44 +75,42 @@ io$inputs$colors <- list(
   )
 )
 
+io$inputs$labels <- list()
+
+io$inputs$labels$markers <- list(
+  Immune = c("CD45", "CD3", "NKP46", "IBA1", "TMEM119"),
+  Cancer = c(
+    "SLC1A3_EAAT1", "HOPX", "SOD2", "CHI3L1", "ANEXIN_A2", "ANXA1",
+    "DLL3", "BCAN", "SCD5", "OLIG1"
+  ),
+  Normal = c("NeuN_FOX3", "GFAP", "MOG"),
+  Vasculature = c("CD31", "SMA")
+)
+
+io$inputs$labels$cell_types <- list(
+  Immune = c("T cell", "NK cell", "Macrophage", "Microglia"),
+  Cancer = c("AC", "MES", "NPC", "OPC"),
+  Normal = c("Neuron", "Astrocyte", "Oligodendrocyte"),
+  Vasculature = c("Endothelial")
+)
+
+
 spe$main_anno_v2 <- ifelse(
-  spe$manual_gating %in% c("T cell", "NK cell", "Macrophage", "Microglia"),
-  "Immune",
+  spe$manual_gating %in% io$inputs$labels$cell_types$Immune, "Immune",
   ifelse(
-    spe$manual_gating %in% c("AC", "MES", "NPC", "OPC"),
-    "Cancer",
+    spe$manual_gating %in% io$inputs$labels$cell_types$Cancer, "Cancer",
     ifelse(
-      spe$manual_gating %in% c("Neuron", "Astrocyte", "Oligodendrocyte"),
-      "Normal",
+      spe$manual_gating %in% io$inputs$labels$cell_types$Normal, "Normal",
       ifelse(
-        spe$manual_gating %in% c("Endothelial"),
-        "Vasculature",
-        NA
+        spe$manual_gating %in% io$inputs$labels$cell_types$Vasculature, "Vasculature", NA
       )
     )
   )
 )
 
 
-spe$main_anno_v2 <- factor(
-  spe$main_anno_v2,
-  levels = c("Immune", "Cancer", "Normal", "Vasculature")
-)
-
-
-io$inputs$marker_labels = list(
-    Immune = c("CD45", "CD3", "NKP46", "IBA1", "TMEM119"),
-    Cancer = c("SLC1A3_EAAT1", "HOPX", "SOD2", "CHI3L1", "ANEXIN_A2", "ANXA1", 
-              "DLL3", "BCAN","SCD5", "OLIG1"), 
-   Normal = c("NeuN_FOX3", "GFAP", "MOG"), 
-   Vasculature = c("CD31","SMA") 
-)
-
-io$inputs$cell_labels = list(
-    Immune = c("T cell", "NK cell", "Macrophage", "Microglia"),
-    Cancer = c("AC", "MES", "NPC", "OPC"), 
-    Normal = c("Neuron", "Astrocyte", "Oligodendrocyte"), 
-    Vasculature = c("Endothelial")
+spe$main_anno_v2 <- factor(spe$main_anno_v2,
+  levels = names(io$inputs$labels$cell_types)
 )
 
 # LABELLED CELL DIMPLOTS  ------------------------------------------------------
@@ -190,152 +186,177 @@ dev.off()
 rm(main_anno, fine_anno, dimplot_data)
 
 # LABELLED CELL HEATMAP  -------------------------------------------------------
-summarised_exprs <- scuttle::summarizeAssayByGroup(
-    x = spe,
-    ids = spe$manual_gating,
-    assay.type = "zscore",
-    subset.row = unlist(io$inputs$marker_labels, use.names = FALSE),
-    subset.col = NULL,
-    statistics = "median",
-    store.number = "ncells"
-)
-
-# returns a matrix where rows: markers, columns: labels
-summarised_exprs <- SummarizedExperiment::assay(summarised_exprs, "median")
-
-plot_data = as.data.frame(summarised_exprs) %>%
-    tibble::rownames_to_column(var = "marker") %>%
-    tidyr::pivot_longer(
-        cols = -marker,
-        names_to = "cell_type",
-        values_to = "score"
-    ) %>%
-    mutate(
-        across(
-            cell_type, 
-            ~factor(.x, levels = colnames(summarised_exprs))
-               ),
-        across(
-            marker, 
-            ~factor(.x, levels = rev(rownames(summarised_exprs)))
-            )
-        )
+label_exprs <- scuttle::summarizeAssayByGroup(
+  x = spe,
+  ids = spe$manual_gating,
+  assay.type = "zscore",
+  subset.row = unlist(io$inputs$labels$markers, use.names = FALSE),
+  subset.col = NULL,
+  statistics = "median",
+  store.number = "ncells"
+) %>%
+  SummarizedExperiment::assay("median")
 
 
-corr_plot_theme <-
-    ggplot2::theme_minimal() +
-    ggplot2::theme(
-        axis.text = element_text(size = 16, face = "bold"),
-        axis.text.x = element_text(angle = 45, vjust = 1, size = 12, hjust = 1),
-        axis.text.y = element_text(size = 12),
-        axis.ticks = element_line(color = "grey50", linewidth = 0.2),
-        axis.title = element_blank(),
-        legend.key.size = ggplot2::unit(10, "mm"),
-        legend.text = element_text(size = 12),
-        legend.title = element_text(size = 16),
-        legend.position = "right",
-        panel.grid.major = element_blank(),
-        plot.title = element_text(size = 20, face = "bold"),
-        plot.subtitle = element_text(size = 14, face = "italic")
+heatmap_data <- as.data.frame(label_exprs) %>%
+  tibble::rownames_to_column(var = "marker") %>%
+  tidyr::pivot_longer(
+    cols = -marker,
+    names_to = "cell_type",
+    values_to = "score"
+  ) %>%
+  mutate(
+    across(
+      cell_type,
+      ~ factor(.x, levels = colnames(label_exprs))
+    ),
+    across(
+      marker,
+      ~ factor(.x, levels = rev(rownames(label_exprs)))
     )
+  )
+
+# Label counts boxplot
+count_data <- spe$manual_gating[spe$manual_gating %in% unlist(io$inputs$labels$cell_types)] %>%
+  table() %>%
+  as.data.frame() %>%
+  dplyr::rename(cell_type = 1, count = Freq)
+
+p1 <- count_data %>%
+  ggplot(aes(x = cell_type, y = count)) +
+  geom_bar(stat = "identity", fill = "slateblue", width = 0.8) + # Use `stat = "identity"` to plot actual values
+  geom_text(aes(label = count), vjust = -0.5, size = 5, fontface = "bold") + # Add labels on top of bars
+  ylim(0, max(count_data$count) * 1.15) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+
+heatmap_theme <-
+  ggplot2::theme_minimal() +
+  ggplot2::theme(
+    plot.title = element_blank(),
+    plot.subtitle = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      vjust = 1,
+      size = 12,
+      hjust = 1,
+      face = "bold"
+    ),
+    axis.text.y = element_text(size = 12, face = "bold"),
+    axis.ticks = element_line(color = "grey50", linewidth = 0.2),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    legend.key.size = ggplot2::unit(10, "mm"),
+    panel.grid.major = element_blank()
+  )
 
 
 
-p <- plot_data %>%
-    ggplot(mapping = aes(x = cell_type, y = marker)) +
-    geom_tile(aes(fill = score), color = "grey25", linetype = 3, na.rm = TRUE) + 
-    ggplot2::scale_fill_gradientn(
-        # colors = io$inputs$colors$diverging,
-        colors = c("grey99", "grey99", "#313695"),
-        limits = c(-2, 2.5),  # Keep the limits to show all data
-        guide = guide_colorbar(
-            ticks = TRUE,
-            ticks.colour = "grey90",
-            frame.colour = "grey90",
-            barwidth = 2.5,
-            barheight = 15
-        ),
-        name = "z-score",
-        na.value = "white"
+p2 <- heatmap_data %>%
+  ggplot(mapping = aes(x = cell_type, y = marker)) +
+  geom_tile(aes(fill = score), color = "grey25", linetype = 3, na.rm = TRUE) +
+  ggplot2::scale_fill_gradientn(
+    colors = c("grey99", "grey99", "#313695"),
+    limits = c(-2, 2.5),
+    guide = guide_colorbar(
+      ticks = TRUE,
+      ticks.colour = "grey90",
+      frame.colour = "grey90",
+      barwidth = 2.5,
+      barheight = 15
+    ),
+    name = "z-score",
+    na.value = "white"
+  ) +
+  ggplot2::labs(
+    title = "Marker Expression",
+    subtitle = "Median expression of all labelled cells"
+  ) +
+  heatmap_theme
+
+
+add_highlight_regions <- function(baseplot,
+                                  row_groups,
+                                  col_groups,
+                                  highlight_colors,
+                                  highlight_width = 3,
+                                  legend_name = "") {
+  unique_row_groups <- unique(row_groups)
+  unique_col_groups <- unique(col_groups)
+
+  highlight_regions <- data.frame(
+    group = factor(unique_row_groups, levels = names(highlight_colors)),
+    xmin = NA,
+    xmax = NA,
+    ymin = NA,
+    ymax = NA,
+    color = highlight_colors[unique_row_groups]
+  )
+
+  for (i in seq_along(unique_row_groups)) {
+    # Calculate ymin and ymax for the row groups (in reverse order)
+    ymin_position <- min(which(row_groups == unique_row_groups[i])) # top-most position
+    ymax_position <- max(which(row_groups == unique_row_groups[i])) # bottom-most position
+
+    highlight_regions$ymin[i] <- length(row_groups) - ymax_position + 0.5
+    highlight_regions$ymax[i] <- length(row_groups) - ymin_position + 1.5
+
+    highlight_regions$xmin[i] <- min(which(col_groups == unique_col_groups[i])) - 0.5
+    highlight_regions$xmax[i] <- max(which(col_groups == unique_col_groups[i])) + 0.5
+  }
+
+  out_plot <- baseplot +
+    geom_rect(
+      data = highlight_regions,
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, color = group),
+      fill = NA, linewidth = highlight_width, inherit.aes = FALSE
     ) +
-    ggplot2::labs(
-        title = "Marker Expression",
-        subtitle = "Median expression of all labelled cells",
-        x = "Cell Type",
-        y = "Marker"
-    ) +
-    corr_plot_theme
+    scale_color_manual(name = legend_name, values = highlight_colors)
 
-
-add_highlight_regions = function(baseplot, 
-                                 row_groups, 
-                                 col_groups, 
-                                 highlight_colors, 
-                                 highlight_width = 3,
-                                 legend_name = "") {
-    
-    unique_row_groups = unique(row_groups)
-    unique_col_groups = unique(col_groups)
-    
-    # Initialize highlight regions
-    highlight_regions = data.frame(
-        group = factor(unique_row_groups, levels = names(highlight_colors)),
-        xmin = NA,
-        xmax = NA,
-        ymin = NA,
-        ymax = NA,
-        color = highlight_colors[unique_row_groups]
-    )
-    
-    for (i in seq_along(unique_row_groups)) {
-        # Calculate ymin and ymax for the row groups (in reverse order)
-        ymin_position = min(which(row_groups == unique_row_groups[i]))  # Topmost position
-        ymax_position = max(which(row_groups == unique_row_groups[i]))  # Bottommost position
-        highlight_regions$ymin[i] = length(row_groups) - ymax_position + 0.5
-        highlight_regions$ymax[i] = length(row_groups) - ymin_position + 1.5
-        
-        # Calculate xmin and xmax for the column groups (left to right remains the same)
-        highlight_regions$xmin[i] = min(which(col_groups == unique_col_groups[i])) - 0.5
-        highlight_regions$xmax[i] = max(which(col_groups == unique_col_groups[i])) + 0.5
-    }
-    
-    out_plot = baseplot +
-        geom_rect(
-            data = highlight_regions,
-            aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, color = group),
-            fill = NA, linewidth = highlight_width, inherit.aes = FALSE
-        ) +
-        scale_color_manual(name = legend_name, values = highlight_colors)
-    
-    return(out_plot)
+  return(out_plot)
 }
 
-p <- add_highlight_regions(
-    baseplot = p,
-    row_groups = rep(names(io$inputs$cell_labels), times = lengths(io$inputs$marker_labels)),
-    col_groups = rep(names(io$inputs$marker_labels), times = lengths(io$inputs$cell_labels)),
-    highlight_colors = io$inputs$colors$cell_groups,
-    legend_name = ""
+p2 <- add_highlight_regions(
+  baseplot = p2,
+  row_groups = rep(
+    x = names(io$inputs$labels$cell_types),
+    times = lengths(io$inputs$labels$markers)
+  ),
+  col_groups = rep(
+    x = names(io$inputs$labels$markers),
+    times = lengths(io$inputs$labels$cell_types)
+  ),
+  highlight_colors = io$inputs$colors$cell_groups,
+  legend_name = ""
 )
 
+library(patchwork)
 
+svglite::svglite(
+  file = nf("label_expression_heatmap.svg", io$output$temp_out),
+  width = 12,
+  height = 15
+)
 
-p1 <- spe$manual_gating[spe$manual_gating %in% unlist(io$inputs$cell_labels, use.names = FALSE)] %>%
-    table() %>%
-    as.data.frame() %>%
-    dplyr::rename(cell_type = 1, count = Freq) %>%
-    ggplot(aes(x = cell_type, y = count)) +
-    geom_bar(stat = "identity", fill = "slateblue", width = 0.8) +  # Use `stat = "identity"` to plot actual values
-    geom_text(aes(label = count), vjust = -0.5, size = 5, fontface = "bold") +  # Add labels on top of bars
-    IMCfuncs::facetted_comp_bxp_theme() +
-    theme(
-        axis.text.x = element_blank(),
-        axis.title.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.title.y = element_blank(),
-        axis.ticks = element_blank()
-    )
+p1 / p2 + plot_layout(heights = c(1, 7))
 
+dev.off()
+
+rm(
+  label_exprs, count_data, heatmap_data,
+  add_highlight_regions, heatmap_theme,
+  p1, p2
+)
 
 # REGION-TYPE CELL LABELS   ----------------------------------------------------
 count_anno_labels <- function(grouping_var, anno_label,
