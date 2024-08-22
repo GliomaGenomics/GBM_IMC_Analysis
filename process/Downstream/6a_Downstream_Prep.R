@@ -5,8 +5,6 @@
 
 # PACKAGES ---------------------------------------------------------------------
 library(SpatialExperiment)
-# library(dittoSeq)
-# library(imcRtools)
 library(ggplot2)
 library(viridis)
 library(magrittr)
@@ -18,8 +16,7 @@ library(IMCfuncs)
 # I/O --------------------------------------------------------------------------
 io <- list(
   inputs = list(
-    comp_data = "data/downstream/compensated",
-    functions = "process/Downstream/functions"
+    comp_data = "data/downstream/compensated"
   ),
   output = list(
     cell_pheno_out = "outputs/cell_phenotyping"
