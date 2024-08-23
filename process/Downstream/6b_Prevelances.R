@@ -141,7 +141,7 @@ regions <- regions %>%
 
 rm(count_labels)
 
-# PLOT LABELLED/UNDEFINED LABEL COUNTS -----------------------------------------
+# PLOT LABELLED/UNDEFINED CELL COUNTS ------------------------------------------
 svglite::svglite(
   nf("cell_labelling_counts.svg", io$output$temp_out),
   width = 15, height = 10
@@ -173,9 +173,19 @@ regions %>%
 
 dev.off()
 
-# RE-LABEL CELLS BASED ON CELL COUNTS ------------------------------------------
+# RE-LABEL REGIONS BASED ON CELL COUNTS ----------------------------------------
+# Each image represents a tissue section that was selected based on
+# positive immunohistochemistry markers for either immune-rich, proliferative or
+# hypoxic regions. Each patient and surgery sample pairing was selected to have at least
+# one of each region type. We can use the imaging mass cytometry labelled cell-type
+# and state prevalences to corroborate if the histochemistry region labels were
+# indeed reflective of the cells initially labelled based on IHC single cell-type/state
+# canonical markers. The region types and therefore the labels are not mutually
+# exclusive, e.g, any given region can be high (as determined by an appropriate threshold)
+# in immune cells and also comprise cells that are in a highly proliferate/hypoxic state.
+
 regions_labels <- regions %>%
-  select(image, total_cells, starts_with("region_")) %>%
+  select(sample_id, total_cells, starts_with("region_")) %>%
   tidyr::pivot_longer(
     cols = starts_with("region_"),
     names_to = "region",
@@ -185,10 +195,9 @@ regions_labels <- regions %>%
   mutate(percent = round(cells / total_cells * 100)) %>%
   mutate(across(region, ~ factor(.x, levels = c("immune", "prolif", "hypoxia"))))
 
-
-# Function to add new region labels based on the percentage of cell that are
-# labelled as either immune, hypoxia or proliferative.
-add_region_cols <- function(regions, count_col, region_labels,
+add_region_cols <- function(regions,
+                            count_col,
+                            region_labels,
                             immune_min = 20,
                             state_min = 50) {
   out <- as.list(setNames(
@@ -222,22 +231,23 @@ regions_labels <- add_region_cols(
 # After looking at 82prim_002 this is going to be re-labelled as having a
 # high immune fraction
 
-regions_labels$immune[regions_labels$image == "82Prim_002" &
+regions_labels$immune[regions_labels$sample_id == "82Prim_002" &
   regions_labels$region == "immune"] <- TRUE
 
 # Add colour info for facets based on the region labels
-regions_labels$facet_background <- plot_colours$patient[str_extract(regions_labels$image, "^\\d{2}")]
+regions_labels$facet_background <- plot_colours$patient[str_extract(regions_labels$sample_id, "^\\d{2}")]
 regions_labels$facet_text <- IMCfuncs::get_text_color(regions_labels$facet_background)
 
-# PLOT REGION LABELS -----------------------------------------------------------
+rm(add_region_cols)
+# PLOT RE-LABELLED REGIONS -----------------------------------------------------
+svglite::svglite(
+  filename = nf("regions_labels.svg", io$output$temp_out),
+  width = 12,
+  height = 25
+)
 
-# Plot the region proportions along with the min thresholds used for each of the
-# cut-off values.
-io$plots$regions <-
-  ggplot(
-    data = regions_labels,
-    aes(x = region, y = percent, fill = region, group = image)
-  ) +
+regions_labels %>%
+  ggplot(aes(x = region, y = percent, fill = region, group = sample_id)) +
   geom_bar(position = "dodge", stat = "identity") +
   geom_abline(aes(intercept = io$plots$args$immune_min, slope = 0, color = "Immune Threshold"),
     lty = 2
@@ -245,18 +255,23 @@ io$plots$regions <-
   geom_abline(aes(intercept = io$plots$args$state_min, slope = 0, color = "State Threshold"),
     lty = 2
   ) +
-  ggh4x::facet_wrap2(~image,
+  ggh4x::facet_wrap2(
+    facets = " sample_id",
     ncol = 3,
     strip = ggh4x::strip_themed(
-      background_x = lapply(split(regions_labels, regions_labels$image), \(x) {
-        element_rect(fill = unique(x[["facet_background"]]))
-      }),
-      text_x = lapply(split(regions_labels, regions_labels$image), \(x) {
-        element_text(
-          colour = unique(x[["facet_text"]]),
-          face = "bold"
-        )
-      })
+      background_x = lapply(
+        split(regions_labels, regions_labels$sample_id), \(x) {
+          element_rect(fill = unique(x[["facet_background"]]))
+        }
+      ),
+      text_x = lapply(
+        split(regions_labels, regions_labels$sample_id), \(x) {
+          element_text(
+            colour = unique(x[["facet_text"]]),
+            face = "bold"
+          )
+        }
+      )
     )
   ) +
   xlab("") +
@@ -274,19 +289,12 @@ io$plots$regions <-
     legend.position = "top"
   )
 
+dev.off()
 
-# Each image represents a tissue section that was selected based on
-# positive immunohistochemistry markers for either immune-rich, proliferative or
-# hypoxic regions. Each patient and surgery sample pairing was selected to have at least
-# one of each region type. We can use the imaging mass cytometry labelled cell-type
-# and state prevalences to corroborate if the histochemistry region labels were
-# indeed reflective of the cells initially labelled based on IHC single cell-type/state
-# canonical markers. The region types and therefore the labels are not mutually
-# exclusive, e.g, any given region can be high (as determined by an appropriate threshold)
-# in immune cells and also comprise cells that are in a highly proliferate/hypoxic state.
+
 
 regions <- regions_labels %>%
-  group_by(image) %>%
+  group_by(sample_id) %>%
   summarise(
     immune = any(immune),
     prolif = any(prolif),
@@ -294,64 +302,62 @@ regions <- regions_labels %>%
     .groups = "keep"
   ) %>%
   ungroup() %>%
-  left_join(regions, ., by = "image")
+  left_join(regions, ., by = "sample_id")
 
 
-region_present_data <- regions %>%
-  select(image, patient, surgery, ROI, immune, prolif, hypoxia)
-
-# Add colour info for facets based on the region labels
-region_present_data$facet_background <- plot_colours$patient[region_present_data$patient]
-region_present_data$facet_text <- IMCfuncs::get_text_color(region_present_data$facet_background)
-
-
-region_present_data <- region_present_data %>%
+plot_data <- regions %>%
+  select(sample_id, patient, surgery, ROI, immune, prolif, hypoxia) %>%
+  mutate(
+    facet_background = plot_colours$patient[patient],
+    facet_text = IMCfuncs::get_text_color(facet_background)
+  ) %>%
   tidyr::pivot_longer(c("immune", "prolif", "hypoxia"),
     names_to = "region",
     values_to = "present"
   ) %>%
-  mutate(patient_surgery = paste0(patient, surgery))
+  mutate(
+    patient_surgery = paste(patient, surgery, sep = "_"),
+    across(present, ~ factor(ifelse(.x, "yes", "no"), levels = c("yes", "no")))
+  )
 
+svglite::svglite(
+  filename = nf("regions_per_sample.svg", io$output$temp_out),
+  width = 15,
+  height = 30
+)
 
-io$plots$regions_present <- region_present_data %>%
+plot_data %>%
   ggplot(aes(x = region, y = ROI, fill = present)) +
   geom_point(shape = 21, size = 45, color = "grey75") +
   xlab("") +
   ylab("") +
-  ggh4x::facet_wrap2(~patient_surgery,
+  ggh4x::facet_wrap2(
+    facets = "patient_surgery",
     ncol = 2,
     strip = ggh4x::strip_themed(
-      background_x = lapply(split(region_present_data, region_present_data$patient_surgery), \(x) {
-        element_rect(fill = unique(x[["facet_background"]]))
-      }),
-      text_x = lapply(split(region_present_data, region_present_data$patient_surgery), \(x) {
-        element_text(
-          colour = unique(x[["facet_text"]]),
-          face = "bold"
-        )
-      })
+      background_x = lapply(
+        split(plot_data, plot_data$patient_surgery), \(x) {
+          element_rect(fill = unique(x[["facet_background"]]))
+        }
+      ),
+      text_x = lapply(
+        split(plot_data, plot_data$patient_surgery), \(x) {
+          element_text(
+            colour = unique(x[["facet_text"]]),
+            face = "bold"
+          )
+        }
+      )
     )
   ) +
-  scale_fill_manual(values = c("FALSE" = "#000004FF", "TRUE" = "#FCFDBFFF")) +
-  theme_classic(base_size = 20) +
-  theme(legend.title = element_blank())
+  scale_fill_manual(
+    values = c("yes" = "#FCFDBFFF", "no" = "#000004FF")
+  ) +
+  IMCfuncs::grouped_comp_bxp_theme()
 
+dev.off()
 
-# Save re-labelled region plots
-# svglite::svglite(nf("regions_labels.svg",io$output$cell_prevalences),
-#                  width = 12, height = 25)
-# io$plots$regions
-# dev.off()
-#
-#
-#
-# svglite::svglite(nf("regions_per_sample.svg",io$output$cell_prevalences),
-#                  width = 15, height = 30)
-# io$plots$regions_present
-# dev.off()
-
-rm(region_present_data, regions_labels, add_region_cols)
-
+rm(plot_data, regions_labels)
 # CALCULATE SHANNON ENTROPIES --------------------------------------------------
 # Here we are seeking to measure heterogeneity by
 # using Shannon entropy (H) based on annotated cell subtypes as determined from
