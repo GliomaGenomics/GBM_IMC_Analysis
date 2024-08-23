@@ -119,56 +119,57 @@ factor(regions$surgery, names(spe@metadata$v2_colours$dataset_pheno)) %>%
   droplevels()
 
 
-regions <-  regions %>%
-    mutate(
-        across(
-            surgery, ~ factor(.x, levels = names(plot_colours$surgery))
-            ),
-        across(
-            responder_type, ~factor(.x, levels = c("up", "down"))
-            ),
-        across(
-            patient, ~factor(.x, levels = names(plot_colours$patient))
-            ),
-        across(
-            ROI, ~factor(.x, levels = names(plot_colours$ROI))
-            ),
-        across(
-            c(imc_region_label, hist_region_label), 
-            ~factor(.x, levels = names(plot_colours$region_type))
-           )
-        )
+regions <- regions %>%
+  mutate(
+    across(
+      surgery, ~ factor(.x, levels = names(plot_colours$surgery))
+    ),
+    across(
+      responder_type, ~ factor(.x, levels = c("up", "down"))
+    ),
+    across(
+      patient, ~ factor(.x, levels = names(plot_colours$patient))
+    ),
+    across(
+      ROI, ~ factor(.x, levels = names(plot_colours$ROI))
+    ),
+    across(
+      c(imc_region_label, hist_region_label),
+      ~ factor(.x, levels = names(plot_colours$region_type))
+    )
+  )
 
 rm(count_labels)
 
 # PLOT LABELLED/UNDEFINED LABEL COUNTS -----------------------------------------
-
 svglite::svglite(
-    nf("cell_labelling_counts.svg", io$output$temp_out),
-    width = 15, height = 10)
+  nf("cell_labelling_counts.svg", io$output$temp_out),
+  width = 15, height = 10
+)
 
-regions %>% 
-    select(patient, surgery, labelled, undefined) %>%
-    tidyr::pivot_longer(
-        cols = c("labelled", "undefined"),
-        names_to = "anno",
-        values_to = "count"
-    ) %>%
-    group_by(patient, surgery, anno) %>%
-    summarise(count = sum(count), .groups = "keep") %>%
-    ungroup() %>%
-    ggplot(aes(x = anno, y = count, fill = anno)) +
-    geom_bar(position = "dodge", stat = "identity") +
-    facet_grid(surgery ~ patient) +
-    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-    ylab("cell count") +
-    scale_y_continuous(breaks = seq(0, 14000, 2000)) +
-    scale_fill_viridis(discrete = TRUE, begin = 0.5) +
-    IMCfuncs::facetted_cell_prop_theme() +
-    theme(axis.text.x = element_blank(),
-          axis.title.x = element_blank(),
-          axis.ticks.x = element_blank()
-          )
+regions %>%
+  select(patient, surgery, labelled, undefined) %>%
+  tidyr::pivot_longer(
+    cols = c("labelled", "undefined"),
+    names_to = "anno",
+    values_to = "count"
+  ) %>%
+  group_by(patient, surgery, anno) %>%
+  summarise(count = sum(count), .groups = "keep") %>%
+  ungroup() %>%
+  ggplot(aes(x = anno, y = count, fill = anno)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  facet_grid(surgery ~ patient) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("cell count") +
+  scale_y_continuous(breaks = seq(0, 14000, 2000)) +
+  scale_fill_viridis(discrete = TRUE, begin = 0.5) +
+  IMCfuncs::facetted_cell_prop_theme() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 
 dev.off()
 
