@@ -359,12 +359,12 @@ dev.off()
 
 rm(plot_data, regions_labels)
 # CALCULATE SHANNON ENTROPIES --------------------------------------------------
-# Here we are seeking to measure heterogeneity by
-# using Shannon entropy (H) based on annotated cell subtypes as determined from
-# the cell clustering/phenotyping process. To account for the different number
-# of cells per sample, we will sub-sample n (1000) cells from each patient sample (i),
-# over ten (three is default) rounds can then calculate the Shannon entropy of
-# each cell-type frequency occurrence.
+# Here we are seeking to measure the intra-patient heterogeneity by
+# using Shannon entropy (H) and the annotated cell type labels. In order to 
+# account for the different number of cells per sample, we will 
+# sub-sample n (1000) cells from each patient sample (i). This will be repeated
+# over ten rounds, to obtain the Shannon entropy of the cell type frequencies
+# in each patient sample region.
 
 calculate_props <- function(x, labels, sample_size = 1000, rounds = 3) {
   base <- setNames(object = rep(0, length(labels)), nm = labels)
@@ -383,7 +383,7 @@ calculate_props <- function(x, labels, sample_size = 1000, rounds = 3) {
   return(unlist(out, use.names = FALSE))
 }
 
-# Calculate the entropy for each cell type
+# Calculate the entropy for each cell type label (per sample ID)
 set.seed(123)
 regions$entropy <- map(regions$anno_labels, ~ calculate_props(
   .x,
@@ -399,34 +399,39 @@ rm(calculate_props)
 # patient we will initially seek to make the following comparisons:
 
 # convert the regions data.frame to a long format based on the region type
-regions_long <- regions %>%
-  tidyr::pivot_longer(
-    immune:hypoxia,
-    names_to = "region",
-    values_to = "region_present"
-  ) %>%
-  filter(region_present == TRUE)
+# regions_long <- regions %>%
+#   tidyr::pivot_longer(
+#     immune:hypoxia,
+#     names_to = "region",
+#     values_to = "region_present"
+#   ) %>%
+#   filter(region_present == TRUE)
 
 
+# P vs R 
 # P vs R by patient
 # up vs down by surgery
 # P vs R by regions
-io$plots$args$shannon_entropy_comps <- tribble(
-  ~df, ~response_var, ~comp_var, ~group_var, ~plot_names,
-  "regions", "entropy", "surgery", "patient", "patient_surgery",
-  "regions", "entropy", "surgery", "responder_type", "responder_surgery",
-  "regions_long", "entropy", "surgery", "region", "region_surgery"
+se_comps <- tribble(
+  ~df,                ~response_var,     ~comp_var,       ~group_var,          ~label,
+  "regions",          "entropy",         "surgery",       NULL,                "surgery",
+  "regions",          "entropy",         "surgery",       "patient",            "surgery_patient"
+  # "regions",          "entropy",         "surgery",       "responder_type",  "surgery_responder",
+  # "regions_long",     "entropy",         "surgery",       "region"           "surgery_region"
 )
 
-io$plots$shannon_entropies <- pmap(io$plots$args$shannon_entropy_comps, ~ {
+sh_ent <- pmap(se_comps, ~ {
   df_to_use <- get(..1, envir = globalenv())
 
   stats <- compare_groups(
     df = df_to_use,
+    df_name = ..1,
     response_var = ..2,
     nested_response_var = TRUE,
     comp_var = ..3,
     group_var = ..4,
+    stat = "wilcox",
+    p_adjust_method = "fdr",
     facetted_plot_dims = TRUE
   )
 
@@ -438,40 +443,38 @@ io$plots$shannon_entropies <- pmap(io$plots$args$shannon_entropy_comps, ~ {
     fill = ..3,
     color_palette = plot_colours$surgery
   )
-
-
-  out <- out_boxplot +
-    # Add statistics
+  
+  out_boxplot <-  out_boxplot +
     ggpubr::stat_pvalue_manual(stats, label = "p_signif", tip.length = 0, size = 7) +
-
-    # Add 10% spaces between the p-value labels and the plot border
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.1, 0.1))) +
-
-    # Add custom theme
+    ylab("Shannon Entropy")  +
     IMCfuncs::facetted_comp_bxp_theme(hide_x_labs = T)
 
-  # Expand the y axis scale to zoom into the box plots
-  # # + ggplot2::coord_cartesian(ylim = c(0, stats$y.position[1]))
-
-
-  return(out)
+  return(
+      list(
+      stats = stats, 
+      boxplot = out_boxplot,
+      label = ..5
+      )
+      )
 })
 
-names(io$plots$shannon_entropies) <- io$plots$args$shannon_entropy_comps$plot_names
-
-
-iwalk(io$plots$shannon_entropies, ~ {
+purrr::walk(sh_ent, ~ {
   # Save the Shannon entropy comparisons
-  svglite::svglite(nf(paste0(.y, "_sh_entropy.svg"), io$output$cell_prevalences),
-    width = 15, height = 10
+  svglite::svglite(
+      filename = nf(paste0(.x$label, "_sh_entropy.svg"), io$output$temp_out),
+      width = 15, 
+      height = 10
   )
 
-  print(.x)
+  print(.x$boxplot)
 
   dev.off()
 })
 
-# PLOT CELL PREVELENCES --------------------------------------------------------
+
+
+# PLOT CELL PROPORTIONS --------------------------------------------------------
 
 # groups: patient, regions, responder types
 io$plots$args$prevelence_comps <- tribble(
@@ -523,7 +526,6 @@ io$plots$cell_prevelences
 dev.off()
 
 # QUANTIFYING CELL TYPE PREVALENCES --------------------------------------------
-
 # Convert anno counts to proportions
 regions$main_anno <- lapply(regions$main_anno, \(x) prop.table(x))
 regions$fine_anno <- lapply(regions$fine_anno, \(x) prop.table(x))
@@ -548,9 +550,7 @@ add_stats_to_plot <- function(plot_stats, box_plot) {
   return(out)
 }
 
-
 # SURGERY PREVALENCES STATS ----------------------------------------------------
-
 stats <- compare_groups(
   df = regions,
   response_var = "fine_anno",
@@ -562,17 +562,11 @@ stats <- compare_groups(
   p_signif_col = "p"
 )
 
-
-
-
 io$plots$args$comps_stats <- tribble(
   ~df, ~tbl, ~response_var, ~comp_var, ~group_var, ~unnest_y_levels, ~plot_names,
   "regions", NULL, "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "all_regions_main",
   "regions", NULL, "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "all_regions_fine",
 )
-
-
-
 
 # New version of the function
 foo <- purrr::pmap(plot_args, ~ {
@@ -676,7 +670,6 @@ iwalk(io$plots$cell_comp_stats, ~ {
 rm(stats, bxp)
 
 # REGION/RESPONDER PREVALENCES STATS -------------------------------------------
-
 # We can quantify the cell type prevalences stratified across various groups in
 # order to see if any particular cell types are significantly different across
 # comparisons groups. The identities of the stratifications are as follows:
