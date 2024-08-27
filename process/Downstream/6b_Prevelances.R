@@ -467,7 +467,15 @@ purrr::walk(sh_ent, ~ {
   dev.off()
 })
 
-rm(calculate_props, se_comps)
+sh_stats <- purrr::map(sh_ent, ~ .x$stats)
+names(sh_stats) <- sapply(sh_ent, \(x) x$label)
+
+openxlsx::write.xlsx(
+  x = sh_stats,
+  file = nf("shannon_entropy_stats.xlsx", io$output$temp_out)
+)
+
+rm(calculate_props, se_comps, sh_stats, sh_ent)
 
 # PLOT CELL PROPORTIONS --------------------------------------------------------
 labelled_props <- function(df,
