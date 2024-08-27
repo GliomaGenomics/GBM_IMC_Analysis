@@ -467,59 +467,64 @@ purrr::walk(sh_ent, ~ {
   dev.off()
 })
 
-rm(calculate_props)
-
-
-
+rm(calculate_props, se_comps)
 
 # PLOT CELL PROPORTIONS --------------------------------------------------------
+labelled_props <- function(df,
+                           label_col,
+                           colgroups = NULL,
+                           rowgroups = NULL,
+                           color_palette,
+                           y_axis_title = "labelled cell proportions",
+                           plot_title = "",
+                           plot_subtitle = "",
+                           x_axis_title = "") {
+  plot_data <- df %>%
+    tidyr::unnest_longer(col = label_col, values_to = "count") %>%
+    tidyr::unnest_wider(count)
 
-# groups: patient, regions, responder types
-io$plots$args$prevelence_comps <- tribble(
-  ~df, ~x, ~facet_by, ~fill, ~color_palette, ~plot_names,
-  "regions", "ROI", "patient ~ surgery", "main_anno", plot_colours$main_anno, "patient_surgery_main",
-  "regions", "ROI", "patient ~ surgery", "fine_anno", plot_colours$cell_anno, "patient_surgery_fine",
-  "regions", "responder_type", "patient ~ surgery", "main_anno", plot_colours$main_anno, "patient_responder_surgery_main",
-  "regions", "responder_type", "patient ~ surgery", "fine_anno", plot_colours$cell_anno, "patient_responder_surgery_fine",
-  "regions_long", "region", "patient ~ surgery", "main_anno", plot_colours$main_anno, "region_patient_surgery_main",
-  "regions_long", "region", "patient ~ surgery", "fine_anno", plot_colours$cell_anno, "region_patient_surgery_fine",
-  "regions_long", "region", "responder_type ~ surgery", "main_anno", plot_colours$main_anno, "region_responder_surgery_main",
-  "regions_long", "region", "responder_type ~ surgery", "fine_anno", plot_colours$cell_anno, "region_responder_surgery_fine",
+  plot_data %>%
+    ggplot2::ggplot(aes(x = surgery, y = freq, fill = label, colour = label)) +
+    geom_bar(stat = "identity", position = "fill") +
+    facet_grid(
+      rows = if (!is.null(rowgroups)) ggplot2::vars(!!ggplot2::sym(rowgroups)) else NULL,
+      cols = if (!is.null(colgroups)) ggplot2::vars(!!ggplot2::sym(colgroups)) else NULL
+    ) +
+    ylab(y_axis_title) +
+    xlab(x_axis_title) +
+    labs(title = plot_title, subtitle = plot_subtitle) +
+    ggplot2::scale_y_continuous(labels = scales::percent_format()) +
+    ggplot2::scale_fill_manual(values = color_palette) +
+    ggplot2::scale_color_manual(values = color_palette) +
+    IMCfuncs::facetted_cell_prop_theme()
+}
+
+prop_comps <- tribble(
+  ~df, ~label_col, ~colgroups, ~rowgroups, ~color_palette,
+  "regions", "main_anno", NULL, NULL, spe@metadata$v2_colours$cell_groups,
+  "regions", "main_anno", "patient", NULL, spe@metadata$v2_colours$cell_groups,
+  "regions", "main_anno", "patient", "ROI", spe@metadata$v2_colours$cell_groups,
+  "regions", "fine_anno", NULL, NULL, spe@metadata$v2_colours$cells,
+  "regions", "fine_anno", "patient", NULL, spe@metadata$v2_colours$cells,
+  "regions", "fine_anno", "patient", "ROI", spe@metadata$v2_colours$cells
 )
 
-# cell_props_facetted(
-#   df = regions,
-#   x = "responder_type",
-#   facet_by = "patient ~ surgery",
-#   fill = "main_anno",
-#   unnest_labels = TRUE,
-#   color_palette = plot_colours$main_anno
-# ) +
-#   facetted_cell_prop_theme(text_size = 20)
-
-io$plots$cell_prevelences <- pmap(io$plots$args$prevelence_comps, ~ {
-  out <- cell_props_facetted(
+prop_plots <- pmap(prop_comps, ~ {
+  labelled_props(
     df = get(..1, envir = globalenv()),
-    x = ..2,
-    facet_by = ..3,
-    fill = ..4,
-    unnest_labels = TRUE,
+    label_col = ..2,
+    colgroups = ..3,
+    rowgroups = ..4,
     color_palette = ..5
-  ) +
-    facetted_cell_prop_theme(text_size = 20)
-
-  return(out)
+  )
 })
 
-names(io$plots$cell_prevelences) <- io$plots$args$prevelence_comps$plot_names
-
-# Save plots as one single pdf
 pdf(
   onefile = T, width = 25, height = 25,
-  file = nf("cell_proportions.pdf", io$output$cell_prevalences)
+  file = nf("label_proportions.pdf", io$outputs$temp_out)
 )
 
-io$plots$cell_prevelences
+prop_plots
 
 dev.off()
 
