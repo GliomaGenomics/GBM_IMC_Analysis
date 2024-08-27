@@ -358,10 +358,10 @@ plot_data %>%
 dev.off()
 
 rm(plot_data, regions_labels)
-# CALCULATE SHANNON ENTROPIES --------------------------------------------------
+# SHANNON ENTROPY --------------------------------------------------------------
 # Here we are seeking to measure the intra-patient heterogeneity by
-# using Shannon entropy (H) and the annotated cell type labels. In order to 
-# account for the different number of cells per sample, we will 
+# using Shannon entropy (H) and the annotated cell type labels. In order to
+# account for the different number of cells per sample, we will
 # sub-sample n (1000) cells from each patient sample (i). This will be repeated
 # over ten rounds, to obtain the Shannon entropy of the cell type frequencies
 # in each patient sample region.
@@ -392,11 +392,7 @@ regions$entropy <- map(regions$anno_labels, ~ calculate_props(
   rounds = 10
 ))
 
-rm(calculate_props)
-
-# PLOT SHANNON ENTROPIES -------------------------------------------------------
-# As we are mainly interested in how things change in response to treatment in each
-# patient we will initially seek to make the following comparisons:
+# plot Shannon entropy results
 
 # convert the regions data.frame to a long format based on the region type
 # regions_long <- regions %>%
@@ -407,15 +403,15 @@ rm(calculate_props)
 #   ) %>%
 #   filter(region_present == TRUE)
 
+# we are mainly interested in how things change in response to treatment in each
+# patient we will initially seek to make the following comparisons:
+# P vs R
+# P vs R (grouped by patient)
 
-# P vs R 
-# P vs R by patient
-# up vs down by surgery
-# P vs R by regions
 se_comps <- tribble(
-  ~df,                ~response_var,     ~comp_var,       ~group_var,          ~label,
-  "regions",          "entropy",         "surgery",       NULL,                "surgery",
-  "regions",          "entropy",         "surgery",       "patient",            "surgery_patient"
+  ~df, ~response_var, ~comp_var, ~group_var, ~label,
+  "regions", "entropy", "surgery", NULL, "surgery",
+  "regions", "entropy", "surgery", "patient", "surgery_patient"
   # "regions",          "entropy",         "surgery",       "responder_type",  "surgery_responder",
   # "regions_long",     "entropy",         "surgery",       "region"           "surgery_region"
 )
@@ -443,34 +439,36 @@ sh_ent <- pmap(se_comps, ~ {
     fill = ..3,
     color_palette = plot_colours$surgery
   )
-  
-  out_boxplot <-  out_boxplot +
+
+  out_boxplot <- out_boxplot +
     ggpubr::stat_pvalue_manual(stats, label = "p_signif", tip.length = 0, size = 7) +
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.1, 0.1))) +
-    ylab("Shannon Entropy")  +
+    ylab("Shannon Entropy") +
     IMCfuncs::facetted_comp_bxp_theme(hide_x_labs = T)
 
   return(
-      list(
-      stats = stats, 
+    list(
+      stats = stats,
       boxplot = out_boxplot,
       label = ..5
-      )
-      )
+    )
+  )
 })
 
 purrr::walk(sh_ent, ~ {
-  # Save the Shannon entropy comparisons
   svglite::svglite(
-      filename = nf(paste0(.x$label, "_sh_entropy.svg"), io$output$temp_out),
-      width = 15, 
-      height = 10
+    filename = nf(paste0(.x$label, "_sh_entropy.svg"), io$output$temp_out),
+    width = 15,
+    height = 10
   )
 
   print(.x$boxplot)
 
   dev.off()
 })
+
+rm(calculate_props)
+
 
 
 
@@ -518,7 +516,7 @@ names(io$plots$cell_prevelences) <- io$plots$args$prevelence_comps$plot_names
 # Save plots as one single pdf
 pdf(
   onefile = T, width = 25, height = 25,
-  file = nf("cell_prevalences.pdf", io$output$cell_prevalences)
+  file = nf("cell_proportions.pdf", io$output$cell_prevalences)
 )
 
 io$plots$cell_prevelences
