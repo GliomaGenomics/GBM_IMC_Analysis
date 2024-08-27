@@ -523,11 +523,10 @@ pdf(
   onefile = T, width = 25, height = 25,
   file = nf("label_proportions.pdf", io$outputs$temp_out)
 )
-
 prop_plots
-
 dev.off()
 
+rm(prop_comps, prop_plots, labelled_props)
 # QUANTIFYING CELL TYPE PREVALENCES --------------------------------------------
 # Convert anno counts to proportions
 regions$main_anno <- lapply(regions$main_anno, \(x) prop.table(x))
