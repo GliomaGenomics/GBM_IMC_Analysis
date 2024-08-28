@@ -392,17 +392,6 @@ regions$entropy <- map(regions$anno_labels, ~ calculate_props(
   rounds = 10
 ))
 
-# plot Shannon entropy results
-
-# convert the regions data.frame to a long format based on the region type
-# regions_long <- regions %>%
-#   tidyr::pivot_longer(
-#     immune:hypoxia,
-#     names_to = "region",
-#     values_to = "region_present"
-#   ) %>%
-#   filter(region_present == TRUE)
-
 # we are mainly interested in how things change in response to treatment in each
 # patient we will initially seek to make the following comparisons:
 # P vs R
@@ -412,8 +401,6 @@ se_comps <- tribble(
   ~df, ~response_var, ~comp_var, ~group_var, ~label,
   "regions", "entropy", "surgery", NULL, "surgery",
   "regions", "entropy", "surgery", "patient", "surgery_patient"
-  # "regions",          "entropy",         "surgery",       "responder_type",  "surgery_responder",
-  # "regions_long",     "entropy",         "surgery",       "region"           "surgery_region"
 )
 
 sh_ent <- pmap(se_comps, ~ {
@@ -477,7 +464,7 @@ openxlsx::write.xlsx(
 
 rm(calculate_props, se_comps, sh_stats, sh_ent)
 
-# PLOT CELL PROPORTIONS --------------------------------------------------------
+# VISUALISE LABELLED CELL PROPORTIONS ------------------------------------------
 labelled_props <- function(df,
                            label_col,
                            colgroups = NULL,
@@ -535,252 +522,195 @@ prop_plots
 dev.off()
 
 rm(prop_comps, prop_plots, labelled_props)
-# QUANTIFYING CELL TYPE PREVALENCES --------------------------------------------
-# Convert anno counts to proportions
-regions$main_anno <- lapply(regions$main_anno, \(x) prop.table(x))
-regions$fine_anno <- lapply(regions$fine_anno, \(x) prop.table(x))
-
-regions_long$main_anno <- lapply(regions_long$main_anno, \(x) prop.table(x))
-regions_long$fine_anno <- lapply(regions_long$fine_anno, \(x) prop.table(x))
-
-add_stats_to_plot <- function(plot_stats, box_plot) {
-  out <- box_plot +
-
-    # Add stats to the boxplot
-    ggpubr::stat_pvalue_manual(plot_stats, label = "p_signif", tip.length = 0, size = 7) +
-
-    # Add 10% spaces between the p-value labels and the plot border
-    ggplot2::scale_y_continuous(
-      expand = ggplot2::expansion(mult = c(0.1, 0.1)),
-      labels = scales::percent_format()
-    ) +
-    # Add custom theme
-    IMCfuncs::facetted_comp_bxp_theme(hide_x_labs = T)
-
-  return(out)
+# QUANTIFY LABELLED CELL PROPORTIONS--------------------------------------------
+add_proportions <- function(x) {
+  x %>%
+    dplyr::mutate(
+      total = sum(freq),
+      prop = freq / total * 100
+    ) %>%
+    dplyr::select(-total)
 }
 
-# SURGERY PREVALENCES STATS ----------------------------------------------------
-stats <- compare_groups(
-  df = regions,
-  response_var = "fine_anno",
-  nested_response_var = TRUE,
-  comp_var = "surgery",
-  group_var = "fine_anno",
-  facetted_plot_dims = TRUE,
-  stat_y_pos_multiplier = 3,
-  p_signif_col = "p"
-)
+regions <- regions %>%
+  mutate(
+    across(c("main_anno", "fine_anno"), ~ map(.x, add_proportions))
+  )
 
-io$plots$args$comps_stats <- tribble(
-  ~df, ~tbl, ~response_var, ~comp_var, ~group_var, ~unnest_y_levels, ~plot_names,
-  "regions", NULL, "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "all_regions_main",
-  "regions", NULL, "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "all_regions_fine",
-)
+compare_props <- function(df,
+                          response_var,
+                          comp_var,
+                          stat = c("wilcox", "t"),
+                          paired_test = FALSE,
+                          p_adjust_method = "fdr",
+                          signif_on = c("p_adj", "p"),
+                          stat_y_pos_multiplier = 1) {
+  df_name <- deparse(substitute(df))
+  stat_used <- match.arg(stat, several.ok = FALSE)
+  paired_out <- ifelse(paired_test, "(Paired)", "")
+  comp_formula <- reformulate(response = "prop", termlabels = comp_var)
 
-# New version of the function
-foo <- purrr::pmap(plot_args, ~ {
-  if (is.null(..2)) {
-    df_to_use <- get(..1, envir = globalenv())
+  long_data <- df %>%
+    dplyr::select(patient, surgery, ROI, !!sym(response_var)) %>%
+    tidyr::unnest_longer(col = response_var, values_to = "response") %>%
+    tidyr::unnest_wider(response) %>%
+    dplyr::group_by(label)
+
+  df_grouped_by <- as.character(dplyr::groups(long_data))
+
+  # print message start --
+  cli::cli_div(theme = list(span.emph = list(color = "orange")))
+  cli::cli_div(theme = list(span.strong = list(color = "darkred")))
+  cli::cli_h1("Comparison Summary")
+  cli::cli_text("")
+  cli::cli_alert_info("{.strong DATA:} {.emph {df_name}}")
+  cli::cli_alert_info("{.strong STAT:} {.emph {stat_used}{paired_out}, p.adjust = '{p_adjust_method}'}")
+  cli::cli_alert_info("{.strong FORMULA:} {.emph {comp_formula[[2]]} ~ {comp_formula[[3]]}}")
+  cli::cli_alert_info("{.strong GROUP(S):} {.emph '{response_var}' ({dplyr::n_groups(long_data)})}")
+  cli::cli_h1("")
+  # print message end --
+
+  stat_test <- switch(stat_used,
+    wilcox = rstatix::wilcox_test(
+      data = long_data,
+      formula = comp_formula,
+      paired = paired_test,
+      p.adjust.method = "none"
+    ),
+    t = rstatix::t_test(
+      data = long_data,
+      formula = comp_formula,
+      paired = paired_test,
+      p.adjust.method = "none"
+    )
+  )
+
+  stat_test <- stat_test %>%
+    rstatix::adjust_pvalue(
+      output.col = "p_adj",
+      method = p_adjust_method
+    ) %>%
+    rstatix::add_significance(
+      p.col = signif_on,
+      output.col = "p_signif"
+    ) %>%
+    rstatix::add_xy_position(x = comp_var) %>%
+    dplyr::mutate(
+      method = stat_used,
+      paired_test = paired_test,
+      p_adj_method = p_adjust_method,
+      `.y.` = "prop",
+      dataset = df_name,
+      across(
+        p_signif,
+        ~ ifelse(. == "ns", glue::glue("{signif_on} = {round(stat_test[[signif_on]], 3)}"), .)
+      )
+    ) %>%
+    dplyr::relocate(dataset)
+
+  outliers <- sapply(df[[response_var]], \(x) x$prop, simplify = FALSE) %>%
+    unlist(use.names = FALSE) %>%
+    boxplot.stats()
+
+  if (length(outliers$out) == 0) {
+    stat_test %>% dplyr::mutate(y.position = max(stat_test$y.position))
   } else {
-    df_to_use <- get(..1, envir = globalenv())[[..2]]
+    stat_test %>% dplyr::mutate(y.position = min(outliers$out) * stat_y_pos_multiplier)
   }
+
+  stat_test[[comp_var]] <- factor(stat_test$group1, levels = levels(long_data[[comp_var]]))
+
 
   return(
     list(
-      comparison = ifelse(
-        ..3 == ..5,
-        yes = paste(..4, ..3, sep = "_"),
-        no = paste(..4, ..3, ..5, sep = "_")
-      ),
-      stats = compare_groups(
-        df = df_to_use,
-        response_var = ..3,
-        nested_response_var = TRUE,
-        unnest_levels = ..6,
-        comp_var = ..4,
-        group_var = ..5,
-        facetted_plot_dims = TRUE,
-        stat_y_pos_multiplier = 3,
-        p_signif_col = "p"
-      ),
-      boxplot = comp_boxplot(
-        df = df_to_use,
-        x = ..4,
-        y = ..3,
-        facet_by = ..3,
-        unnest_y = TRUE,
-        unnest_y_levels = ..6,
-        fill = ..4,
-        ylab = "Cell Proportions (%)",
-        color_palette = plot_colours$surgery
-      )
+      data = long_data,
+      stats = stat_test
     )
   )
-})
-
-add_stats_to_plot(plot_stats = foo[[1]]$stats, box_plot = foo[[1]]$boxplot)
-
-foo <- pmap(io$plots$args$comps_stats, ~ {
-  if (is.null(..2)) {
-    df_to_use <- get(..1, envir = globalenv())
-  } else {
-    df_to_use <- get(..1, envir = globalenv())[[..2]]
-  }
-
-  stats <- compare_groups(
-    df = df_to_use,
-    response_var = ..3,
-    nested_response_var = TRUE,
-    comp_var = ..4,
-    group_var = ..5,
-    facetted_plot_dims = TRUE,
-    stat_y_pos_multiplier = 3,
-    p_signif_col = "p"
-  )
-
-  stats[[..3]] <- factor(stats[[..3]], levels = ..6)
+}
 
 
-  bxp <- comp_boxplot(
-    df = df_to_use,
-    x = ..4,
-    y = ..3,
-    facet_by = ..3,
-    unnest_y = TRUE,
-    unnest_y_levels = ..6,
-    fill = ..4,
-    ylab = "Cell Proportions (%)",
-    color_palette = plot_colours$surgery
-  )
-
-  out <- add_stats_to_plot(stats, bxp)
-
-  return(out)
-})
-
-iwalk(io$plots$cell_comp_stats, ~ {
-  if (grepl("(?i)_fine$", x = .y)) {
-    svglite::svglite(nf(paste0(.y, ".svg"), io$output$cell_prevalence_comps),
-      width = 20, height = 20
+create_plot <- function(label_data, label_stats, label_name) {
+  ggplot(label_data, aes(x = surgery, y = prop, fill = surgery)) +
+    geom_boxplot() +
+    scale_fill_manual(values = plot_colours$surgery) +
+    ylab("Cell Proportions (%)") +
+    ggtitle(label_name) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(size = 25, face = "bold", hjust = 0.5)
+    ) +
+    stat_pvalue_manual(
+      data = label_stats,
+      label = "p_signif",
+      xmin = "xmin",
+      xmax = "xmax",
+      y.position = "y.position",
+      tip.length = 0,
+      size = 7,
+      fontface = "italic"
+    ) +
+    ggplot2::scale_y_continuous(
+      expand = ggplot2::expansion(mult = c(0.1, 0.1))
     )
-    print(.x)
+}
 
-    dev.off()
-  } else {
-    svglite::svglite(nf(paste0(.y, ".svg"), io$output$cell_prevalence_comps),
-      width = 15, height = 10
-    )
-    print(.x)
+comp_patchwork <- function(comp_list, ncols = 2, nrows = NULL) {
+  facets <- unique(comp_list$data$label)
 
-    dev.off()
-  }
-})
+  plots <- purrr::map(facets, ~ {
+    label_data <- comp_list$data[comp_list$data$label == .x, ]
+    label_stats <- comp_list$stats[comp_list$stats$label == .x, ]
 
-rm(stats, bxp)
+    create_plot(label_data, label_stats, .x)
+  })
 
-# REGION/RESPONDER PREVALENCES STATS -------------------------------------------
-# We can quantify the cell type prevalences stratified across various groups in
-# order to see if any particular cell types are significantly different across
-# comparisons groups. The identities of the stratifications are as follows:
-#
-# surgery (primary and recurrent)
-# region_type (hypoxia, proliferative and immune)
-# responder_type (up and down)
+  patchwork::wrap_plots(plots, ncol = ncols, nrow = nrows) +
+    patchwork::plot_layout(guides = "collect", axis_titles = "collect") &
+    ggplot2::theme(legend.position = "bottom")
+}
 
-region_filt_props <- as.list(setNames(
-  object = c("immune", "prolif", "hypoxia"),
-  nm = c("Immune Regions", "Prolif Regions", "Hypoxia Regions")
-))
+comps <- list()
 
-region_filt_props <- lapply(region_filt_props, \(x) regions[regions[[x]] == T, ])
-
-region_filt_props$`Up Responders` <- regions[regions[["responder_type"]] == "up", ]
-region_filt_props$`Down Responders` <- regions[regions[["responder_type"]] == "down", ]
-
-
-io$plots$args$comps_stats <- tribble(
-  ~df, ~tbl, ~response_var, ~comp_var, ~group_var, ~unnest_y_levels, ~plot_names,
-  "region_filt_props", "Immune Regions", "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "immune_regions_main",
-  "region_filt_props", "Immune Regions", "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "immune_regions_fine",
-  "region_filt_props", "Prolif Regions", "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "prolif_regions_main",
-  "region_filt_props", "Prolif Regions", "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "prolif_regions_fine",
-  "region_filt_props", "Hypoxia Regions", "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "hypoxia_regions_main",
-  "region_filt_props", "Hypoxia Regions", "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "hypoxia_regions_fine",
-  "region_filt_props", "Up Responders", "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "up_responders_main",
-  "region_filt_props", "Up Responders", "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "up_responders_fine",
-  "region_filt_props", "Down Responders", "main_anno", "surgery", "main_anno", names(plot_colours$main_anno), "down_responders_main",
-  "region_filt_props", "Down Responders", "fine_anno", "surgery", "fine_anno", names(plot_colours$cell_anno), "down_responders_fine",
+comps$main <- compare_props(
+  df = regions,
+  response_var = "main_anno",
+  comp_var = "surgery",
+  signif_on = "p"
 )
 
+comps$fine <- compare_props(
+  df = regions,
+  response_var = "fine_anno",
+  comp_var = "surgery",
+  signif_on = "p"
+) 
 
-io$plots$cell_comp_region_stats <- pmap(io$plots$args$comps_stats, ~ {
-  df_to_use <- get(..1, envir = globalenv())[[..2]]
+stats <- purrr::map(comps, ~ .x$stats)
 
-  stats <- compare_groups(
-    df = df_to_use,
-    response_var = ..3,
-    nested_response_var = TRUE,
-    comp_var = ..4,
-    group_var = ..5,
-    facetted_plot_dims = TRUE,
-    stat_y_pos_multiplier = 3,
-    p_signif_col = "p"
-  )
+openxlsx::write.xlsx(
+  x = stats,
+  file = nf("label_prop_stats.xlsx", io$output$temp_out)
+)
 
-  stats[[..3]] <- factor(stats[[..3]], levels = ..6)
-
-
-  bxp <- comp_boxplot(
-    df = df_to_use,
-    x = ..4,
-    y = ..3,
-    facet_by = ..3,
-    unnest_y = TRUE,
-    unnest_y_levels = ..6,
-    fill = ..4,
-    ylab = "Cell Proportions (%)",
-    color_palette = plot_colours$surgery
-  )
-
-  out <- add_stats_to_plot(stats, bxp, title = ..2)
-
-  return(out)
-})
-
-names(io$plots$cell_comp_region_stats) <- io$plots$args$comps_stats$plot_names
+svglite::svglite(
+    filename = nf("surgery_main_anno.svg", io$output$temp_out),
+    width = 15, 
+    height = 15
+)
+comp_patchwork(comps$main)
+dev.off()
 
 
-iwalk(io$plots$cell_comp_region_stats, ~ {
-  if (grepl("(?i)_fine$", x = .y)) {
-    svglite::svglite(nf(paste0(.y, ".svg"), io$output$cell_prevalence_comps),
-      width = 20, height = 20
-    )
-    print(.x)
-
-    dev.off()
-  } else {
-    svglite::svglite(nf(paste0(.y, ".svg"), io$output$cell_prevalence_comps),
-      width = 15, height = 10
-    )
-    print(.x)
-
-    dev.off()
-  }
-})
-
-
-## The Wilcoxon Signed Rank Test can be used to see if the population median of
-## the difference scores is equal to 0 or not
-
-# We can also check the effect size measure for this test, using the
-# wilcoxonPairedR() function from the rcompanion package.
-# The function requires the data to be ordered specifically: The top half of the
-# data are the values for group1. The bottom half of the data are the values for group2.
-# Then the id variable needs to be in the same order for both groups.
-#
-# An effect size above 0.7 is considered to be a large,
-# Anything above 0.5 is a moderate effect size,
-# and anything above 0.3 is a small effect size.
+svglite::svglite(
+    filename = nf("surgery_fine_anno.svg", io$output$temp_out),
+    width = 20, 
+    height = 18
+)
+comp_patchwork(comps$fine, ncols = 4)
+dev.off()
 
 # END --------------------------------------------------------------------------
