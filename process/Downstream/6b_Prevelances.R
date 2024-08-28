@@ -522,7 +522,7 @@ prop_plots
 dev.off()
 
 rm(prop_comps, prop_plots, labelled_props)
-# QUANTIFY LABELLED CELL PROPORTIONS--------------------------------------------
+# QUANTIFY LABELLED CELL PROPORTIONS -------------------------------------------
 add_proportions <- function(x) {
   x %>%
     dplyr::mutate(
@@ -687,7 +687,7 @@ comps$fine <- compare_props(
   response_var = "fine_anno",
   comp_var = "surgery",
   signif_on = "p"
-) 
+)
 
 stats <- purrr::map(comps, ~ .x$stats)
 
@@ -697,20 +697,23 @@ openxlsx::write.xlsx(
 )
 
 svglite::svglite(
-    filename = nf("surgery_main_anno.svg", io$output$temp_out),
-    width = 15, 
-    height = 15
+  filename = nf("surgery_main_anno.svg", io$output$temp_out),
+  width = 15,
+  height = 15
 )
 comp_patchwork(comps$main)
 dev.off()
 
 
 svglite::svglite(
-    filename = nf("surgery_fine_anno.svg", io$output$temp_out),
-    width = 20, 
-    height = 18
+  filename = nf("surgery_fine_anno.svg", io$output$temp_out),
+  width = 20,
+  height = 18
 )
 comp_patchwork(comps$fine, ncols = 4)
 dev.off()
+
+# SAVE OUTPUT DATA -------------------------------------------------------------
+saveRDS(regions, nf("prevelance_data.rds", io$output$temp_out))
 
 # END --------------------------------------------------------------------------
