@@ -15,8 +15,6 @@
 
 # PACKAGES ---------------------------------------------------------------------
 library(SpatialExperiment)
-# library(dittoSeq)
-# library(imcRtools)
 library(ggplot2)
 library(viridis)
 library(magrittr)
