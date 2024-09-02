@@ -22,6 +22,7 @@ library(stringr)
 library(purrr)
 library(SpatialExperiment)
 library(IMCfuncs)
+library(imcRtools)
 
 # I/O --------------------------------------------------------------------------
 io <- list(
@@ -43,13 +44,12 @@ io$outputs$temp_out <- nd(path = io$outputs$out_dir)
 
 # obtain the most-recent data from a time-stamped directory
 find_file <- function(dir_path,
-         file_pattern,
-         dir_pattern = "^[T0-9-]+$",
-         dir_select = c("recent", "oldest")) {
+                      file_pattern,
+                      dir_pattern = "^[T0-9-]+$",
+                      dir_select = c("recent", "oldest")) {
+  if (missing(dir_path)) stop("No directory path provided")
+  if (missing(file_pattern)) stop("No file pattern provided")
 
-    if(missing(dir_path)) stop("No directory path provided")
-    if(missing(file_pattern)) stop("No file pattern provided")
-        
   dirs_found <- list.files(dir_path, pattern = dir_pattern)
 
   if (length(dirs_found) == 0) stop("No directories found")
@@ -63,7 +63,7 @@ find_file <- function(dir_path,
     path = file.path(dir_path, dir_selected),
     pattern = file_pattern,
     ignore.case = TRUE,
-    recursive = FALSE, 
+    recursive = FALSE,
     full.names = TRUE
   )
 
@@ -76,16 +76,61 @@ find_file <- function(dir_path,
   }
 }
 
-io$inputs$data <-  find_file(io$inputs$input_dir, file_pattern = "spe_downstream")
-io$inputs$prevelance_out <-  find_file(io$inputs$prevelance_out, file_pattern = "prevelance_data")
+io$inputs$data <- find_file(io$inputs$input_dir, file_pattern = "spe_downstream")
+io$inputs$prevelance_out <- find_file(io$inputs$prevelance_out, file_pattern = "prevelance_data")
+
+rm(find_file)
 
 # LOAD DATA --------------------------------------------------------------------
 spe <- readRDS(io$inputs$data)
-regions <-  readRDS(io$inputs$prevelance_out)
+regions <- readRDS(io$inputs$prevelance_out)
 
-# ADD LABELS AND COLOURS -------------------------------------------------------
-io$plots$labels <- list()
+# VISUALISE LABELLED CELLS COORDINATES -----------------------------------------
+lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
-# CLEAN DATA -------------------------------------------------------------------
+lab_spe <- as_tibble(spatialCoords(lab_spe)) %>%
+  dplyr::rename(x = Pos_X, y = Pos_Y) %>%
+  cbind(
+    id = lab_spe$sample_id,
+    patient = lab_spe$patient,
+    surgery = lab_spe$surgery,
+    label = lab_spe$manual_gating
+  )
+
+svglite::svglite(
+  filename = nf("labelled_samples.svg", io$outputs$temp_out),
+  width = 25,
+  height = 20
+)
+
+lab_spe %>%
+  ggplot(aes(x = x, y = y, color = label)) +
+  geom_point(size = 1, alpha = 0.75) +
+  facet_wrap(~id) +
+  scale_color_manual(values = spe@metadata$v2_colours$cells) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(legend.position = "right") +
+  guides(color = guide_legend(override.aes = list(size = 10)))
+dev.off()
+
+
+svglite::svglite(
+  filename = nf("labelled_sugery.svg", io$outputs$temp_out),
+  width = 27,
+  height = 10
+)
+
+lab_spe %>%
+  ggplot(aes(x = x, y = y, color = label)) +
+  geom_point(size = 1, alpha = 0.75) +
+  facet_grid(surgery ~ patient) +
+  scale_color_manual(values = spe@metadata$v2_colours$cells) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(legend.position = "right") +
+  guides(color = guide_legend(override.aes = list(size = 10)))
+
+dev.off()
+
+# CREATE SPATIAL INTERACTION GRAPHS --------------------------------------------
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
