@@ -342,35 +342,6 @@
       ],
       "Hash": "bc727aba82bcda74db0bbe188ec6757c"
     },
-    "DescTools": {
-      "Package": "DescTools",
-      "Version": "0.99.54",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "Exact",
-        "MASS",
-        "R",
-        "Rcpp",
-        "base",
-        "boot",
-        "cli",
-        "data.table",
-        "expm",
-        "gld",
-        "grDevices",
-        "graphics",
-        "httr",
-        "methods",
-        "mvtnorm",
-        "readxl",
-        "rstudioapi",
-        "stats",
-        "utils",
-        "withr"
-      ],
-      "Hash": "cdd76cdd712d77020083cf669af8b3f3"
-    },
     "EBImage": {
       "Package": "EBImage",
       "Version": "4.46.0",
@@ -394,20 +365,6 @@
         "utils"
       ],
       "Hash": "b72248afba17fc72b78bbb2a8b52e60e"
-    },
-    "Exact": {
-      "Package": "Exact",
-      "Version": "3.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "graphics",
-        "rootSolve",
-        "stats",
-        "utils"
-      ],
-      "Hash": "1a43175d291899a4b2965b5d8db260e0"
     },
     "FNN": {
       "Package": "FNN",
@@ -1464,27 +1421,6 @@
       ],
       "Hash": "61e097f35917d342622f21cdc79c256e"
     },
-    "coin": {
-      "Package": "coin",
-      "Version": "1.4-3",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "libcoin",
-        "matrixStats",
-        "methods",
-        "modeltools",
-        "multcomp",
-        "mvtnorm",
-        "parallel",
-        "stats",
-        "stats4",
-        "survival",
-        "utils"
-      ],
-      "Hash": "4084b5070a40ad99dad581ed3b67bd55"
-    },
     "colorRamps": {
       "Package": "colorRamps",
       "Version": "2.3.4",
@@ -1899,17 +1835,6 @@
       ],
       "Hash": "a1066cbc05caee9a4bf6d90f194ff4da"
     },
-    "expm": {
-      "Package": "expm",
-      "Version": "0.999-9",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "Matrix",
-        "methods"
-      ],
-      "Hash": "a9cfdee9645dd6b09ba8d4b9a9befa77"
-    },
     "fansi": {
       "Package": "fansi",
       "Version": "1.0.6",
@@ -2323,19 +2248,6 @@
         "ggplot2"
       ],
       "Hash": "a57f0f5dbcfd0d77ad4ff33032f5dc79"
-    },
-    "gld": {
-      "Package": "gld",
-      "Version": "2.6.6",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "e1071",
-        "graphics",
-        "lmom",
-        "stats"
-      ],
-      "Hash": "71173258033324618dc8a09b3e27269e"
     },
     "glue": {
       "Package": "glue",
@@ -2848,18 +2760,6 @@
       ],
       "Hash": "d908914ae53b04d4c0c0fd72ecc35370"
     },
-    "libcoin": {
-      "Package": "libcoin",
-      "Version": "1.0-10",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "mvtnorm",
-        "stats"
-      ],
-      "Hash": "3f3775a14588ff5d013e5eab4453bf28"
-    },
     "lifecycle": {
       "Package": "lifecycle",
       "Version": "1.0.4",
@@ -2898,31 +2798,6 @@
         "utils"
       ],
       "Hash": "16a08fc75007da0d08e0c0388c7c33e6"
-    },
-    "lmom": {
-      "Package": "lmom",
-      "Version": "3.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "graphics",
-        "stats"
-      ],
-      "Hash": "a69348cee0766082223f1c7e2a545505"
-    },
-    "lmtest": {
-      "Package": "lmtest",
-      "Version": "0.9-40",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "graphics",
-        "stats",
-        "zoo"
-      ],
-      "Hash": "c6fafa6cccb1e1dfe7f7d122efd6e6a7"
     },
     "locfit": {
       "Package": "locfit",
@@ -3057,18 +2932,6 @@
       ],
       "Hash": "4f50122dc256b1b6996a4703fecea821"
     },
-    "modeltools": {
-      "Package": "modeltools",
-      "Version": "0.2-23",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "methods",
-        "stats",
-        "stats4"
-      ],
-      "Hash": "f5a957c02222589bdf625a67be68b2a9"
-    },
     "multcomp": {
       "Package": "multcomp",
       "Version": "1.4-26",
@@ -3084,16 +2947,6 @@
         "survival"
       ],
       "Hash": "ec6f951a557132215fab91912acdd9ef"
-    },
-    "multcompView": {
-      "Package": "multcompView",
-      "Version": "0.1-10",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "grid"
-      ],
-      "Hash": "bd174e328b679e9a1ce589422002c72b"
     },
     "munsell": {
       "Package": "munsell",
@@ -3156,16 +3009,6 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "942974f860268d8b22148d142bb8b946"
-    },
-    "nortest": {
-      "Package": "nortest",
-      "Version": "1.0-4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "stats"
-      ],
-      "Hash": "e587e7a30c737ad415590976481332e4"
     },
     "numDeriv": {
       "Package": "numDeriv",
@@ -3537,25 +3380,6 @@
       ],
       "Hash": "7d6eda494f34a644420ac1bfd2a8023a"
     },
-    "rcompanion": {
-      "Package": "rcompanion",
-      "Version": "2.4.36",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "DescTools",
-        "R",
-        "boot",
-        "coin",
-        "graphics",
-        "lmtest",
-        "multcompView",
-        "nortest",
-        "plyr",
-        "stats"
-      ],
-      "Hash": "e95a1c888c74bdc825ad6a1abebcb1c1"
-    },
     "readr": {
       "Package": "readr",
       "Version": "2.1.5",
@@ -3722,19 +3546,6 @@
         "yaml"
       ],
       "Hash": "27f9502e1cdbfa195f94e03b0f517484"
-    },
-    "rootSolve": {
-      "Package": "rootSolve",
-      "Version": "1.8.2.4",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "grDevices",
-        "graphics",
-        "stats"
-      ],
-      "Hash": "c6fa270a97604238a5ce5fe5d327fdad"
     },
     "rstatix": {
       "Package": "rstatix",
