@@ -102,7 +102,6 @@ svglite::svglite(
   width = 25,
   height = 20
 )
-
 lab_spe %>%
   ggplot(aes(x = x, y = y, color = label)) +
   geom_point(size = 1, alpha = 0.75) +
@@ -119,7 +118,6 @@ svglite::svglite(
   width = 27,
   height = 10
 )
-
 lab_spe %>%
   ggplot(aes(x = x, y = y, color = label)) +
   geom_point(size = 1, alpha = 0.75) +
@@ -128,9 +126,109 @@ lab_spe %>%
   IMCfuncs::facetted_comp_bxp_theme() +
   theme(legend.position = "right") +
   guides(color = guide_legend(override.aes = list(size = 10)))
+dev.off()
+
+pdf(
+  file = nf("labelled_cell_counts.pdf", io$outputs$temp_out),
+  width = 10,
+  height = 10,
+  onefile = TRUE
+)
+
+lab_spe@colData[c("patient", "manual_gating")] %>%
+  as.data.frame() %>%
+  group_by(patient) %>%
+  summarise(cells = n()) %>%
+  arrange(cells) %>%
+  ungroup() %>%
+  mutate(name = factor(patient, levels = patient)) %>%
+  ggplot(aes(x = cells, y = name)) +
+  xlab("ncells") +
+  ylab("") +
+  geom_col(fill = "slateblue") +
+  theme_classic()
+
+
+lab_spe@colData[c("patient", "surgery", "manual_gating")] %>%
+  as.data.frame() %>%
+  mutate(patient_surgery = paste(patient, surgery, sep = "_")) %>%
+  group_by(patient_surgery) %>%
+  summarise(cells = n()) %>%
+  arrange(cells) %>%
+  ungroup() %>%
+  mutate(name = factor(patient_surgery, levels = patient_surgery)) %>%
+  ggplot(aes(x = cells, y = name)) +
+  xlab("ncells") +
+  ylab("") +
+  geom_col(fill = "slateblue") +
+  theme_classic()
+
+lab_spe@colData[c("sample_id", "manual_gating")] %>%
+  as.data.frame() %>%
+  group_by(sample_id) %>%
+  summarise(cells = n()) %>%
+  arrange(cells) %>%
+  ungroup() %>%
+  mutate(name = factor(sample_id, levels = sample_id)) %>%
+  ggplot(aes(x = cells, y = name)) +
+  xlab("ncells") +
+  ylab("") +
+  geom_col(fill = "slateblue") +
+  theme_classic()
 
 dev.off()
 
 # CREATE SPATIAL INTERACTION GRAPHS --------------------------------------------
+lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
+
+for (i in seq(5, 30, 5)) {
+  lab_spe <- buildSpatialGraph(
+    object = lab_spe,
+    img_id = "sample_id",
+    type = "knn",
+    k = i,
+    name = paste0("k_", i, collapse = "")
+  )
+}
+
+outplots <- vector("list", length = length(colPairNames(lab_spe)))
+names(outplots) <- colPairNames(lab_spe)
+
+for (i in seq_along(colPairNames(lab_spe))) {
+  colpair <- colPairNames(lab_spe)[[i]]
+
+  outplots[[i]] <- plotSpatial(lab_spe[, lab_spe$patient %in% c("64") & lab_spe$surgery %in% c("Prim", "Rec")],
+    node_color_by = "manual_gating",
+    img_id = "sample_id",
+    draw_edges = TRUE,
+    colPairName = colpair,
+    nodes_first = FALSE,
+    ncols = 3,
+    edge_color_fix = "grey"
+  ) +
+    ggtitle(glue::glue("{colpair} interaction graph")) +
+    scale_color_manual(values = spe@metadata$v2_colours$cells) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(legend.position = "right") +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 10),
+        ncol = 1,
+        bycol = TRUE
+      )
+    )
+}
+
+pdf(
+  file = nf("knn_sweep_graphs.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+
+print(outplots)
+
+dev.off()
+
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
