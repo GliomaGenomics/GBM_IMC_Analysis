@@ -85,49 +85,7 @@ rm(find_file)
 spe <- readRDS(io$inputs$data)
 regions <- readRDS(io$inputs$prevelance_out)
 
-# VISUALISE LABELLED CELLS COORDINATES -----------------------------------------
-lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
-
-lab_spe <- as_tibble(spatialCoords(lab_spe)) %>%
-  dplyr::rename(x = Pos_X, y = Pos_Y) %>%
-  cbind(
-    id = lab_spe$sample_id,
-    patient = lab_spe$patient,
-    surgery = lab_spe$surgery,
-    label = lab_spe$manual_gating
-  )
-
-svglite::svglite(
-  filename = nf("labelled_samples.svg", io$outputs$temp_out),
-  width = 25,
-  height = 20
-)
-lab_spe %>%
-  ggplot(aes(x = x, y = y, color = label)) +
-  geom_point(size = 1, alpha = 0.75) +
-  facet_wrap(~id) +
-  scale_color_manual(values = spe@metadata$v2_colours$cells) +
-  IMCfuncs::facetted_comp_bxp_theme() +
-  theme(legend.position = "right") +
-  guides(color = guide_legend(override.aes = list(size = 10)))
-dev.off()
-
-
-svglite::svglite(
-  filename = nf("labelled_sugery.svg", io$outputs$temp_out),
-  width = 27,
-  height = 10
-)
-lab_spe %>%
-  ggplot(aes(x = x, y = y, color = label)) +
-  geom_point(size = 1, alpha = 0.75) +
-  facet_grid(surgery ~ patient) +
-  scale_color_manual(values = spe@metadata$v2_colours$cells) +
-  IMCfuncs::facetted_comp_bxp_theme() +
-  theme(legend.position = "right") +
-  guides(color = guide_legend(override.aes = list(size = 10)))
-dev.off()
-
+# LABELLED CELL COUNTS ---------------------------------------------------------
 pdf(
   file = nf("labelled_cell_counts.pdf", io$outputs$temp_out),
   width = 10,
@@ -178,7 +136,102 @@ lab_spe@colData[c("sample_id", "manual_gating")] %>%
 
 dev.off()
 
-# CREATE SPATIAL INTERACTION GRAPHS --------------------------------------------
+# LABELLED CELL SPATIAL COORDINATES --------------------------------------------
+plot_cells <- function(spe_obj,
+                       patient = c("64", "67", "71", "82", "84"),
+                       anno = c("fine", "main"),
+                       sample_regions = c("001", "002", "003")) {
+  anno_info <- switch(
+    EXPR = match.arg(anno, several.ok = FALSE),
+    fine = list(
+      label = "manual_gating",
+      colors = spe_obj@metadata$v2_colours$cells
+    ),
+    main = list(
+      label = "main_anno_v2",
+      colors = spe_obj@metadata$v2_colours$cell_groups
+    )
+  )
+
+
+  lab_spe <- spe[, spe$ROI %in% sample_regions & !is.na(spe[[anno_info$label]])]
+
+  lab_spe <- as_tibble(spatialCoords(lab_spe)) %>%
+    dplyr::rename(x = Pos_X, y = Pos_Y) %>%
+    cbind(
+      id = lab_spe$sample_id,
+      patient_id = lab_spe$patient,
+      surgery = lab_spe$surgery,
+      label = lab_spe[[anno_info$label]]
+    ) %>%
+    dplyr::filter(patient_id %in% patient)
+
+  out <- list()
+
+  out$surgery <- lab_spe %>%
+    ggplot(aes(x = x, y = y, color = label)) +
+    geom_point(size = 2, alpha = 0.75) +
+    facet_grid(surgery ~ patient_id) +
+    scale_color_manual(values = anno_info$colors) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(legend.position = "right") +
+    guides(color = guide_legend(override.aes = list(size = 10)))
+
+  out$sample <- lab_spe %>%
+    ggplot(aes(x = x, y = y, color = label)) +
+    geom_point(size = 2, alpha = 0.75) +
+    facet_wrap(~id) +
+    scale_color_manual(values = anno_info$colors) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(legend.position = "right") +
+    guides(color = guide_legend(override.aes = list(size = 10)))
+
+
+  return(out)
+}
+
+
+cell_plots = purrr::map(unique(spe$patient), ~{
+    
+   out = list(
+       surgery = list(), 
+       sample = list()
+       )
+   
+    out$surgery$main = plot_cells(spe_obj = spe, patient = .x, anno = "main")$surgery
+    out$surgery$fine = plot_cells(spe_obj = spe, patient = .x, anno = "fine")$surgery
+    
+    out$sample$main = plot_cells(spe_obj = spe, patient = .x, anno = "main")$sample
+    out$sample$fine = plot_cells(spe_obj = spe, patient = .x, anno = "fine")$sample
+    
+    return(out)
+    
+    })
+names(cell_plots) = paste("patient", unique(spe$patient), sep = "_")
+
+tosave = map(cell_plots, ~ pluck(.x, "surgery")) %>% list_flatten()
+
+pdf(
+  file = nf("surgey_labelled_cell_spatial_coords.pdf", io$outputs$temp_out),
+  width = 12,
+  height = 14,
+  onefile = TRUE
+)
+print(tosave)
+dev.off()
+
+tosave = map(cell_plots, ~ pluck(.x, "sample")) %>% list_flatten()
+
+pdf(
+    file = nf("sample_labelled_cell_spatial_coords.pdf", io$outputs$temp_out),
+    width = 18,
+    height = 12,
+    onefile = TRUE
+)
+print(tosave)
+dev.off()
+
+# KMEANS SPATIAL INTERACTION GRAPHS --------------------------------------------
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
 for (i in seq(5, 30, 5)) {
@@ -191,33 +244,53 @@ for (i in seq(5, 30, 5)) {
   )
 }
 
+plot_interaction_graphs <- function(spe_obj,
+                                    graph_name,
+                                    patients = c("64", "67", "71", "82", "84"),
+                                    node_label = "manual_gating",
+                                    node_colours = spe@metadata$v2_colours$cells) {
+  out <- vector(mode = "list", length = length(patients))
+  names(out) <- paste("patient", patients, sep = "_")
+
+  for (i in seq_along(patients)) {
+    out[[i]] <- imcRtools::plotSpatial(
+      object = spe_obj[, spe_obj$patient == patients[[i]] & spe_obj$surgery %in% c("Prim", "Rec")],
+      node_color_by = "manual_gating",
+      img_id = "sample_id",
+      colPairName = graph_name,
+      nodes_first = FALSE,
+      ncols = 3,
+      draw_edges = TRUE,
+      edge_color_fix = "grey"
+    ) +
+      ggtitle(glue::glue("{graph_name} interaction graph")) +
+      scale_color_manual(values = node_colours) +
+      IMCfuncs::facetted_comp_bxp_theme() +
+      theme(legend.position = "right") +
+      guides(
+        color = guide_legend(
+          override.aes = list(size = 10),
+          ncol = 1,
+          bycol = TRUE
+        )
+      )
+  }
+
+  return(out)
+}
+
 outplots <- vector("list", length = length(colPairNames(lab_spe)))
 names(outplots) <- colPairNames(lab_spe)
 
 for (i in seq_along(colPairNames(lab_spe))) {
-  colpair <- colPairNames(lab_spe)[[i]]
-
-  outplots[[i]] <- plotSpatial(lab_spe[, lab_spe$patient %in% c("64") & lab_spe$surgery %in% c("Prim", "Rec")],
-    node_color_by = "manual_gating",
-    img_id = "sample_id",
-    draw_edges = TRUE,
-    colPairName = colpair,
-    nodes_first = FALSE,
-    ncols = 3,
-    edge_color_fix = "grey"
-  ) +
-    ggtitle(glue::glue("{colpair} interaction graph")) +
-    scale_color_manual(values = spe@metadata$v2_colours$cells) +
-    IMCfuncs::facetted_comp_bxp_theme() +
-    theme(legend.position = "right") +
-    guides(
-      color = guide_legend(
-        override.aes = list(size = 10),
-        ncol = 1,
-        bycol = TRUE
-      )
-    )
+  outplots[[i]] <- plot_interaction_graphs(
+    spe_obj = lab_spe,
+    graph_name = colPairNames(lab_spe)[[i]],
+    patients = c("64", "82") # only plotting the most and least dense patient samples
+  )
 }
+
+outplots <- list_flatten(outplots)
 
 pdf(
   file = nf("knn_sweep_graphs.pdf", io$outputs$temp_out),
@@ -229,6 +302,8 @@ pdf(
 print(outplots)
 
 dev.off()
+
+rm(outplots, i, plot_interaction_graphs)
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
