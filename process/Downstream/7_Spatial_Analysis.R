@@ -191,25 +191,23 @@ plot_cells <- function(spe_obj,
 }
 
 
-cell_plots = purrr::map(unique(spe$patient), ~{
-    
-   out = list(
-       surgery = list(), 
-       sample = list()
-       )
-   
-    out$surgery$main = plot_cells(spe_obj = spe, patient = .x, anno = "main")$surgery
-    out$surgery$fine = plot_cells(spe_obj = spe, patient = .x, anno = "fine")$surgery
-    
-    out$sample$main = plot_cells(spe_obj = spe, patient = .x, anno = "main")$sample
-    out$sample$fine = plot_cells(spe_obj = spe, patient = .x, anno = "fine")$sample
-    
-    return(out)
-    
-    })
-names(cell_plots) = paste("patient", unique(spe$patient), sep = "_")
+cell_plots <- purrr::map(unique(spe$patient), ~ {
+  out <- list(
+    surgery = list(),
+    sample = list()
+  )
 
-tosave = map(cell_plots, ~ pluck(.x, "surgery")) %>% list_flatten()
+  out$surgery$main <- plot_cells(spe_obj = spe, patient = .x, anno = "main")$surgery
+  out$surgery$fine <- plot_cells(spe_obj = spe, patient = .x, anno = "fine")$surgery
+
+  out$sample$main <- plot_cells(spe_obj = spe, patient = .x, anno = "main")$sample
+  out$sample$fine <- plot_cells(spe_obj = spe, patient = .x, anno = "fine")$sample
+
+  return(out)
+})
+names(cell_plots) <- paste("patient", unique(spe$patient), sep = "_")
+
+tosave <- map(cell_plots, ~ pluck(.x, "surgery")) %>% list_flatten()
 
 pdf(
   file = nf("surgey_labelled_cell_spatial_coords.pdf", io$outputs$temp_out),
@@ -220,16 +218,18 @@ pdf(
 print(tosave)
 dev.off()
 
-tosave = map(cell_plots, ~ pluck(.x, "sample")) %>% list_flatten()
+tosave <- map(cell_plots, ~ pluck(.x, "sample")) %>% list_flatten()
 
 pdf(
-    file = nf("sample_labelled_cell_spatial_coords.pdf", io$outputs$temp_out),
-    width = 18,
-    height = 12,
-    onefile = TRUE
+  file = nf("sample_labelled_cell_spatial_coords.pdf", io$outputs$temp_out),
+  width = 18,
+  height = 12,
+  onefile = TRUE
 )
 print(tosave)
 dev.off()
+
+rm(cell_plots, plot_cells, tosave)
 
 # KMEANS SPATIAL INTERACTION GRAPHS --------------------------------------------
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
@@ -298,10 +298,25 @@ pdf(
   height = 15,
   onefile = TRUE
 )
-
 print(outplots)
-
 dev.off()
+
+# Each image comprises on a varying number of cells and so a suitable K value
+# need to be established to identify large and small cluster. After visually 
+# inspecting a number of different K values using the most dense (82) and 
+# least dense (64) samples, k = 15 seems to be a adequate number of 
+# neighbours to use:
+lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
+
+lab_spe <- buildSpatialGraph(
+        object = lab_spe,
+        img_id = "sample_id",
+        type = "knn",
+        k = 15,
+        name = "k_15"
+    )
+
+colPairNames(lab_spe)
 
 rm(outplots, i, plot_interaction_graphs)
 
