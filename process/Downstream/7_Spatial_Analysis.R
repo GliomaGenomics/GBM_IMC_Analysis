@@ -106,7 +106,6 @@ lab_spe@colData[c("patient", "manual_gating")] %>%
   geom_col(fill = "slateblue") +
   theme_classic()
 
-
 lab_spe@colData[c("patient", "surgery", "manual_gating")] %>%
   as.data.frame() %>%
   mutate(patient_surgery = paste(patient, surgery, sep = "_")) %>%
@@ -231,7 +230,7 @@ dev.off()
 
 rm(cell_plots, plot_cells, tosave)
 
-# KNN SPATIAL INTERACTION GRAPHS --------------------------------------------
+# KNN SPATIAL INTERACTION GRAPHS -----------------------------------------------
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
 for (i in seq(5, 30, 5)) {
@@ -316,9 +315,58 @@ lab_spe <- buildSpatialGraph(
   name = "k_15"
 )
 
-colPairNames(lab_spe)
+outplot <- plot_interaction_graphs(spe_obj = lab_spe, graph_name = "k_15")
 
-rm(outplots, i, plot_interaction_graphs)
+pdf(
+  file = nf("k_15_graphs.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+print(outplot)
+dev.off()
 
+rm(outplots, i)
+# DELAUNAY SPATIAL INTERACTION GRAPHS ------------------------------------------
+# The Delaunay triangulation connects points in such a way that no point is inside
+# the circumcircle of any triangle. Neighbours are defined as points that share
+# an edge in the triangulation. This make is a good method for capturing the
+# inherent spatial structure of the especially when the points are irregularly spaced.
+#
+# Pros:
+#     Captures the underlying spatial structure well.
+#     No arbitrary distance thresholds or fixed neighbour counts.
+# Cons:
+#     Can be computationally intensive for large datasets.
+#     May result in some connections that are not meaningful in a biological context.
+
+# Although the method does not inherently involve any distance thresholds we can
+# prune the graph to only include edges that are within a certain distance of each
+# other. This can be useful for removing spurious connections that may be present
+# and limit the number of connections to only those that are biologically relevant.
+
+lab_spe <- buildSpatialGraph(
+  object = lab_spe,
+  img_id = "sample_id",
+  type = "delaunay",
+  max_dist = 50,
+  name = "delaunay_50"
+)
+
+outplot <- plot_interaction_graphs(
+  spe_obj = lab_spe,
+  graph_name = "delaunay_50"
+)
+
+pdf(
+  file = nf("delaunay_50_graphs.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+print(outplot)
+dev.off()
+
+rm(outplot, plot_interaction_graphs)
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
