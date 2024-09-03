@@ -368,5 +368,145 @@ print(outplot)
 dev.off()
 
 rm(outplot, plot_interaction_graphs)
+
+# SPATIAL COMMUNITY ANALYSIS ---------------------------------------------------
+# This method was first described in:
+# Jackson, H. W. et al. The single-cell pathology landscape of breast cancer. Nature 578, 615–620 (2020).
+#
+# Cells are clustered solely based on their interactions as defined by the
+# spatial object graph. Communities with less than a set number of interactions
+# are excluded.
+
+set.seed(123)
+lab_spe <- detectCommunity(
+  object = lab_spe,
+  colPairName = "delaunay_50",
+  name = "delaunay_ca",
+  size_threshold = 10
+)
+
+set.seed(123)
+lab_spe <- detectCommunity(
+  object = lab_spe,
+  colPairName = "k_15",
+  name = "knn_ca",
+  size_threshold = 10
+)
+
+pdf(
+  file = nf("spatial_communities.pdf", io$outputs$temp_out),
+  width = 10,
+  height = 35,
+  onefile = TRUE
+)
+
+plotSpatial(lab_spe,
+  node_color_by = "delaunay_ca",
+  img_id = "sample_id",
+  node_size_fix = 0.75,
+  ncols = 3
+) +
+  ggtitle("Spatial Communities - Delaunay (50)") +
+  scale_color_manual(values = rev(colors())) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(legend.position = "none")
+
+
+plotSpatial(lab_spe,
+  node_color_by = "knn_ca",
+  img_id = "sample_id",
+  node_size_fix = 0.75,
+  ncols = 3
+) +
+  ggtitle("Spatial Communities - KNN (15)") +
+  scale_color_manual(values = rev(colors())) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(legend.position = "none")
+
+dev.off()
+
+
+plot_ca_exprs <- function(spe_obj,
+                          surgery,
+                          anno,
+                          community,
+                          graph_name) {
+  filt_spe <- lab_spe[, lab_spe$surgery == surgery]
+
+  filt_spe <- prop.table(
+    x = table(filt_spe[[community]], filt_spe[[anno]]),
+    margin = 1
+  )
+
+  graph_lab <- stringr::str_split_i(community, "_", 1)
+  graph_param_lab <- stringr::str_split_i(graph_name, "_", 2)
+
+  out_heatmap <- pheatmap::pheatmap(
+    mat = filt_spe,
+    color = colorRampPalette(c("dark blue", "white", "dark red"))(15),
+    show_rownames = FALSE,
+    cluster_cols = FALSE,
+    scale = "column",
+    main = glue::glue("{surgery} communities - {graph_lab} ({graph_param_lab})"),
+    silent = TRUE
+  )
+
+  return(out_heatmap)
+}
+
+
+plot_params <- expand.grid(
+  surgery = c("Prim", "Rec"),
+  anno = c("main_anno_v2"),
+  community = c("knn_ca", "delaunay_ca"),
+  stringsAsFactors = FALSE
+) %>%
+  mutate(graph_name = case_when(
+    community == "knn_ca" ~ "k_15",
+    community == "delaunay_ca" ~ "delaunay_50"
+  ))
+
+
+tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
+
+pdf(
+  file = nf("spatial_community_main_exprs.pdf", io$outputs$temp_out),
+  width = 5,
+  height = 10,
+  onefile = TRUE
+)
+for (p in tosave) {
+  grid::grid.newpage()
+  print(p)
+}
+dev.off()
+
+plot_params <- expand.grid(
+    surgery = c("Prim", "Rec"),
+    anno = c("manual_gating"),
+    community = c("knn_ca", "delaunay_ca"),
+    stringsAsFactors = FALSE
+) %>%
+    mutate(graph_name = case_when(
+        community == "knn_ca" ~ "k_15",
+        community == "delaunay_ca" ~ "delaunay_50"
+    ))
+
+tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
+
+pdf(
+    file = nf("spatial_community_fine_exprs.pdf", io$outputs$temp_out),
+    width = 10,
+    height = 10,
+    onefile = TRUE
+)
+for (p in tosave) {
+    grid::grid.newpage()
+    print(p)
+}
+dev.off()
+
+rm(p, plot_params, tosave, plot_ca_exprs)
+
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
