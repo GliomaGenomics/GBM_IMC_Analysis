@@ -231,7 +231,7 @@ dev.off()
 
 rm(cell_plots, plot_cells, tosave)
 
-# KMEANS SPATIAL INTERACTION GRAPHS --------------------------------------------
+# KNN SPATIAL INTERACTION GRAPHS --------------------------------------------
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
 for (i in seq(5, 30, 5)) {
@@ -302,19 +302,19 @@ print(outplots)
 dev.off()
 
 # Each image comprises on a varying number of cells and so a suitable K value
-# need to be established to identify large and small cluster. After visually 
-# inspecting a number of different K values using the most dense (82) and 
-# least dense (64) samples, k = 15 seems to be a adequate number of 
+# need to be established to identify large and small cluster. After visually
+# inspecting a number of different K values using the most dense (82) and
+# least dense (64) samples, k = 15 seems to be a adequate number of
 # neighbours to use:
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
 lab_spe <- buildSpatialGraph(
-        object = lab_spe,
-        img_id = "sample_id",
-        type = "knn",
-        k = 15,
-        name = "k_15"
-    )
+  object = lab_spe,
+  img_id = "sample_id",
+  type = "knn",
+  k = 15,
+  name = "k_15"
+)
 
 colPairNames(lab_spe)
 
