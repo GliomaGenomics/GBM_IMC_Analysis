@@ -518,10 +518,12 @@ rm(p, plot_params, tosave, plot_ca_exprs)
 # Goltsev et al. 2018. Cell 174: 968–81.
 # Schürch et al. 2020. Cell 182: 1341–59.
 #
-# Aggregation is performed in 2 different ways:
+# There are two way to aggregate cell neighbour information:
 #
-# - For each cell, compute the fraction of cells of a certain type among its neighbours.
-# - For each cell it aggregates (mean) the expression counts across all neighbouring cells.
+# 1. For each cell, compute the fraction of cells of a certain type among its neighbours.
+# 2. For each cell, aggregate (mean, median, etc.) the expression counts across all neighbouring cells.
+# 
+# Both methods will be used independently to define cellular neighbourhoods.
 
 lab_spe <- aggregateNeighbors(
   object = lab_spe,
