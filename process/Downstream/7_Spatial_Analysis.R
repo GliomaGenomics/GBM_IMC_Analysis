@@ -508,5 +508,21 @@ dev.off()
 
 rm(p, plot_params, tosave, plot_ca_exprs)
 
+# CELLULAR NEIGHBORHOOD ANALYSIS -----------------------------------------------
+# Rather than clustering solely based on the interaction graph this method first 
+# aggregates cells based on information contained in their direct neighbourhood and
+# then performs clustering to define cellular neighbourhoods.
+# 
+# This method we will employ here has previously been used in:
+# 
+# Goltsev et al. 2018. Cell 174: 968–81.
+# Schürch et al. 2020. Cell 182: 1341–59.
+# 
+# Aggregation is performed in 2 different ways:
+# 
+# - For each cell, compute the fraction of cells of a certain type among its neighbours.
+# - For each cell it aggregates (mean) the expression counts across all neighbouring cells.
+
+
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
