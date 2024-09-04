@@ -482,47 +482,152 @@ for (p in tosave) {
 dev.off()
 
 plot_params <- expand.grid(
-    surgery = c("Prim", "Rec"),
-    anno = c("manual_gating"),
-    community = c("knn_ca", "delaunay_ca"),
-    stringsAsFactors = FALSE
+  surgery = c("Prim", "Rec"),
+  anno = c("manual_gating"),
+  community = c("knn_ca", "delaunay_ca"),
+  stringsAsFactors = FALSE
 ) %>%
-    mutate(graph_name = case_when(
-        community == "knn_ca" ~ "k_15",
-        community == "delaunay_ca" ~ "delaunay_50"
-    ))
+  mutate(graph_name = case_when(
+    community == "knn_ca" ~ "k_15",
+    community == "delaunay_ca" ~ "delaunay_50"
+  ))
 
 tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
 
 pdf(
-    file = nf("spatial_community_fine_exprs.pdf", io$outputs$temp_out),
-    width = 10,
-    height = 10,
-    onefile = TRUE
+  file = nf("spatial_community_fine_exprs.pdf", io$outputs$temp_out),
+  width = 10,
+  height = 10,
+  onefile = TRUE
 )
 for (p in tosave) {
-    grid::grid.newpage()
-    print(p)
+  grid::grid.newpage()
+  print(p)
 }
 dev.off()
 
 rm(p, plot_params, tosave, plot_ca_exprs)
 
 # CELLULAR NEIGHBORHOOD ANALYSIS -----------------------------------------------
-# Rather than clustering solely based on the interaction graph this method first 
+# Rather than clustering solely based on the interaction graph this method first
 # aggregates cells based on information contained in their direct neighbourhood and
 # then performs clustering to define cellular neighbourhoods.
-# 
+#
 # This method we will employ here has previously been used in:
-# 
+#
 # Goltsev et al. 2018. Cell 174: 968–81.
 # Schürch et al. 2020. Cell 182: 1341–59.
-# 
+#
 # Aggregation is performed in 2 different ways:
-# 
+#
 # - For each cell, compute the fraction of cells of a certain type among its neighbours.
 # - For each cell it aggregates (mean) the expression counts across all neighbouring cells.
 
+lab_spe <- aggregateNeighbors(
+  object = lab_spe,
+  colPairName = "delaunay_50",
+  aggregate_by = "metadata",
+  count_by = "manual_gating",
+  name = "delaunay_cn"
+)
+
+lab_spe <- aggregateNeighbors(
+  object = lab_spe,
+  colPairName = "k_15",
+  aggregate_by = "metadata",
+  count_by = "manual_gating",
+  name = "knn_cn"
+)
+
+set.seed(1234)
+cn_kmeans <- kmeans(lab_spe$delaunay_cn, centers = 12)
+lab_spe$delaunay_cn_clusters <- as.factor(cn_kmeans$cluster)
+
+set.seed(1234)
+cn_kmeans <- kmeans(lab_spe$knn_cn, centers = 12)
+lab_spe$knn_cn_clusters <- as.factor(cn_kmeans$cluster)
+
+plot_cn <- function(spe_obj,
+                    node_label = "manual_gating",
+                    patients = c("64", "67", "71", "82", "84"),
+                    image_id = "sample_id",
+                    plot_title = "Cellular Neighborhoods",
+                    plot_subtitle = node_label,
+                    brewer_pal = "Paired") {
+  out <- vector(mode = "list", length = length(patients))
+  names(out) <- paste("patient", patients, sep = "_")
+
+  for (i in seq_along(patients)) {
+    out[[i]] <- imcRtools::plotSpatial(
+      object = spe_obj[, spe_obj$patient == patients[[i]] & spe_obj$surgery %in% c("Prim", "Rec")],
+      node_color_by = node_label,
+      img_id = image_id,
+      colPairName = NULL,
+      ncols = 3
+    ) +
+      ggtitle(
+        label = plot_title,
+        subtitle = plot_subtitle
+      ) +
+      scale_color_brewer(palette = brewer_pal) +
+      IMCfuncs::facetted_comp_bxp_theme() +
+      theme(
+        legend.position = "right",
+        plot.title = element_text(hjust = 0),
+        plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      ) +
+      guides(
+        color = guide_legend(
+          override.aes = list(size = 10),
+          ncol = 1,
+          bycol = TRUE
+        )
+      )
+  }
+
+  return(out)
+}
+
+io$plots$delaunay_cn <- plot_cn(
+  spe_obj = lab_spe,
+  node_label = "delaunay_cn_clusters",
+  plot_subtitle = glue::glue(
+    "graph (max_dist): Delanuay (50)",
+    "celltype label: manual_gating",
+    .sep = "\n"
+  )
+)
+
+io$plots$knn_cn <- plot_cn(
+  spe_obj = lab_spe,
+  node_label = "knn_cn_clusters",
+  plot_subtitle = glue::glue(
+    "graph (max_dist): KNN (15)",
+    "celltype label: manual_gating",
+    .sep = "\n"
+  )
+)
+
+pdf(
+  file = nf("delaunay_cellular_neighborhoods.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+print(io$plots$delaunay_cn)
+dev.off()
+
+pdf(
+  file = nf("knn_cellular_neighborhoods.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+print(io$plots$knn_cn)
+dev.off()
+
+
+rm(cn_kmeans)
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
