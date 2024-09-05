@@ -620,14 +620,16 @@ dev.off()
 
 rm(cn_kmeans)
 
-
 cn_enrich_bubble <- function(spe_obj,
                              cell_label = "manual_gating",
                              cn_label = "delaunay_cn_clusters",
                              plot_title = "Cell Neighbourhood Enrichment",
                              plot_subtitle = cn_label,
                              rev_cells = FALSE,
-                             limit = c(0.25, 4)) {
+                             limit = c(0.25, 4),
+                             min_point = 3,
+                             max_point = 10) {
+    
     df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
     tab <- table(df[, cell_label], df[, cn_label])
     tab <- tab / rowSums(tab) %*% t(colSums(tab)) * sum(tab)
@@ -637,16 +639,15 @@ cn_enrich_bubble <- function(spe_obj,
     
     tab <- tab %>%
         dplyr::mutate(
-            cellType = factor(Var1, levels = cell_order),
-            region = Var2,
+            cell_label = factor(Var1, levels = cell_order),
+            cn_label = Var2,
             Freq2 = pmax(pmin(Freq, limit[2]), limit[1])
         )
     
     tab %>%
-        ggplot(
-            aes(x = cn_label, y = cell_label, colour = Freq2, size = Freq2)
-        ) +
-        ggplot2::geom_point() +
+        ggplot(aes(x = cn_label, y = cell_label)) +
+        ggplot2::geom_point(aes(colour = Freq2, size = Freq2)) +
+        ggplot2::scale_size(range = c(min_point, max_point)) + 
         ggplot2::scale_colour_gradient2(
             low = "#4575B4",
             mid = "grey90", high = "#D73027", midpoint = 1,
