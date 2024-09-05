@@ -628,8 +628,165 @@ pdf(
 print(io$plots$knn_cn)
 dev.off()
 
-
 rm(cn_kmeans)
+
+
+plot_data <- prop.table(
+    table(as.character(lab_spe$delaunay_cn_clusters), lab_spe$manual_gating),
+    margin = 2
+    ) 
+
+# percent of cells in each cellular neighbourhood
+pheatmap::pheatmap(plot_data * 100, 
+         color = viridis(10, option = "H"),
+         cluster_cols = FALSE,
+         cluster_rows = FALSE,
+         display_numbers = TRUE, 
+         number_format = "%.2f",
+         number_color = "black")
+
+# scaled per celltype across each cellular neighbourhood
+pheatmap::pheatmap(plot_data, 
+         color = colorRampPalette(c("dark blue", "white", "dark red"))(25), 
+         scale = "column",
+         cluster_cols = FALSE,
+         cluster_rows = FALSE
+         )
+
+
+cn_enrich_heatmap <- function(spe_obj,
+                              cell_label = "manual_gating",
+                              cn_label = "delaunay_cn_clusters",
+                              scale_on = c("cell", "cn", "none"),
+                              plot_title = "Cell Neighbourhood Enrichment",
+                              plot_subtitle = cn_label,
+                              fill_pal = viridis::viridis(10, option = "D"),
+                              show_pos_values = TRUE,
+                              rev_cells = FALSE,
+                              limit = c(0.25, 4)) {
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+    
+    tab <- switch(
+        EXPR = match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+        "cell" = scale(table(df[, cn_label], df[, cell_label])),
+        "cn" = t(scale(table(df[, cell_label], df[, cn_label]))),
+        "none" = table(df[, cn_label], df[, cell_label])
+    )
+    
+    lab_df <- table(df[, cn_label], df[, cell_label]) %>%
+        as.data.frame() %>%
+        dplyr::rename(
+            cn_label = Var1,
+            cell_label = Var2,
+            text_lab = Freq
+        )
+    
+    tab <- as.data.frame(tab) %>%
+        dplyr::rename(
+            cn_label = Var1,
+            cell_label = Var2,
+            value = Freq
+        ) %>%
+        dplyr::mutate(
+            value_clipped = pmax(pmin(value, limit[2]), limit[1]),
+            fill_color = fill_pal[as.numeric(cut(value_clipped, breaks = length(fill_pal)))],
+            text_color = IMCfuncs::get_text_color(fill_color)
+        ) %>%
+        dplyr::left_join(lab_df, by = c("cn_label", "cell_label")) %>%
+        dplyr::mutate(
+            dplyr::across(
+                dplyr::starts_with("text"), ~ ifelse(value > 0, ., NA)
+            )
+        )
+    
+    if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
+    
+    tab %>%
+        ggplot(aes(x = cn_label, y = cell_label)) +
+        geom_tile(
+            aes(fill = value),
+            colour = "grey50", linewidth = 0.1, linetype = 2
+        ) +
+        {
+            if (show_pos_values) {
+                geom_text(
+                    aes(label = text_lab, colour = text_color),
+                    size = 4,
+                    fontface = "bold",
+                    na.rm = TRUE,
+                    show.legend = FALSE
+                )
+            }
+        } +
+        ggplot2::scale_fill_gradientn(colours = fill_pal) +
+        scale_color_identity() +
+        labs(
+            title = plot_title,
+            subtitle = plot_subtitle,
+            x = "",
+            y = "",
+            fill = "z-score"
+        ) +
+        ggplot2::theme_minimal() +
+        theme(
+            panel.grid.major = element_blank(),
+            axis.text.x = element_text(size = 16, face = "bold"),
+            axis.text.y = element_text(size = 16, face = "bold"),
+            plot.title = element_text(size = 20, face = "bold"),
+            plot.subtitle = element_text(size = 16, face = "italic")
+        )
+}
+
+cn_enrich_bubble <- function(spe_obj,
+                             cell_label = "manual_gating",
+                             cn_label = "delaunay_cn_clusters",
+                             plot_title = "Cell Neighbourhood Enrichment",
+                             plot_subtitle = cn_label,
+                             rev_cells = FALSE,
+                             limit = c(0.25, 4)) {
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+    tab <- table(df[, cell_label], df[, cn_label])
+    tab <- tab / rowSums(tab) %*% t(colSums(tab)) * sum(tab)
+    tab <- as.data.frame(tab)
+    
+    if (rev_cells) cell_order <- rev(levels(tab$Var1)) else cell_order <- levels(tab$Var1)
+    
+    tab <- tab %>%
+        dplyr::mutate(
+            cellType = factor(Var1, levels = cell_order),
+            region = Var2,
+            Freq2 = pmax(pmin(Freq, limit[2]), limit[1])
+        )
+    
+    tab %>%
+        ggplot(
+            aes(x = cn_label, y = cell_label, colour = Freq2, size = Freq2)
+        ) +
+        ggplot2::geom_point() +
+        ggplot2::scale_colour_gradient2(
+            low = "#4575B4",
+            mid = "grey90", high = "#D73027", midpoint = 1,
+            guide = "legend"
+        ) +
+        ggplot2::labs(
+            title = plot_title,
+            subtitle = plot_subtitle,
+            x = "",
+            y = "",
+            colour = "Relative\nFrequency",
+            size = "Relative\nFrequency"
+        ) +
+        ggplot2::theme_minimal() +
+        theme(
+            panel.grid.major = element_line(
+                colour = "grey80", linewidth = 0.1, linetype = 2
+            ),
+            axis.text.x = element_text(size = 16, face = "bold"),
+            axis.text.y = element_text(size = 16, face = "bold"),
+            plot.title = element_text(size = 20, face = "bold"),
+            plot.subtitle = element_text(size = 16, face = "italic")
+        )
+}
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
