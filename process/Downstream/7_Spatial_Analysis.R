@@ -83,7 +83,10 @@ rm(find_file)
 
 # LOAD DATA --------------------------------------------------------------------
 spe <- readRDS(io$inputs$data)
-regions <- readRDS(io$inputs$prevelance_out)
+# Considering the first three regions across each sample and the labelled cells
+lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
+
+# regions <- readRDS(io$inputs$prevelance_out)
 
 # LABELLED CELL COUNTS ---------------------------------------------------------
 pdf(
@@ -231,8 +234,6 @@ dev.off()
 rm(cell_plots, plot_cells, tosave)
 
 # KNN SPATIAL INTERACTION GRAPHS -----------------------------------------------
-lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
-
 for (i in seq(5, 30, 5)) {
   lab_spe <- buildSpatialGraph(
     object = lab_spe,
@@ -300,6 +301,8 @@ pdf(
 print(outplots)
 dev.off()
 
+rm(outplots, i)
+
 # Each image comprises on a varying number of cells and so a suitable K value
 # need to be established to identify large and small cluster. After visually
 # inspecting a number of different K values using the most dense (82) and
@@ -326,7 +329,6 @@ pdf(
 print(outplot)
 dev.off()
 
-rm(outplots, i)
 # DELAUNAY SPATIAL INTERACTION GRAPHS ------------------------------------------
 # The Delaunay triangulation connects points in such a way that no point is inside
 # the circumcircle of any triangle. Neighbours are defined as points that share
@@ -425,7 +427,6 @@ plotSpatial(lab_spe,
 
 dev.off()
 
-
 plot_ca_exprs <- function(spe_obj,
                           surgery,
                           anno,
@@ -466,7 +467,6 @@ plot_params <- expand.grid(
     community == "delaunay_ca" ~ "delaunay_50"
   ))
 
-
 tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
 
 pdf(
@@ -481,17 +481,7 @@ for (p in tosave) {
 }
 dev.off()
 
-plot_params <- expand.grid(
-  surgery = c("Prim", "Rec"),
-  anno = c("manual_gating"),
-  community = c("knn_ca", "delaunay_ca"),
-  stringsAsFactors = FALSE
-) %>%
-  mutate(graph_name = case_when(
-    community == "knn_ca" ~ "k_15",
-    community == "delaunay_ca" ~ "delaunay_50"
-  ))
-
+plot_params$anno <- "manual_gating"
 tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
 
 pdf(
@@ -631,27 +621,57 @@ dev.off()
 rm(cn_kmeans)
 
 
-plot_data <- prop.table(
-    table(as.character(lab_spe$delaunay_cn_clusters), lab_spe$manual_gating),
-    margin = 2
-    ) 
+cn_enrich_bubble <- function(spe_obj,
+                             cell_label = "manual_gating",
+                             cn_label = "delaunay_cn_clusters",
+                             plot_title = "Cell Neighbourhood Enrichment",
+                             plot_subtitle = cn_label,
+                             rev_cells = FALSE,
+                             limit = c(0.25, 4)) {
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+    tab <- table(df[, cell_label], df[, cn_label])
+    tab <- tab / rowSums(tab) %*% t(colSums(tab)) * sum(tab)
+    tab <- as.data.frame(tab)
+    
+    if (rev_cells) cell_order <- rev(levels(tab$Var1)) else cell_order <- levels(tab$Var1)
+    
+    tab <- tab %>%
+        dplyr::mutate(
+            cellType = factor(Var1, levels = cell_order),
+            region = Var2,
+            Freq2 = pmax(pmin(Freq, limit[2]), limit[1])
+        )
+    
+    tab %>%
+        ggplot(
+            aes(x = cn_label, y = cell_label, colour = Freq2, size = Freq2)
+        ) +
+        ggplot2::geom_point() +
+        ggplot2::scale_colour_gradient2(
+            low = "#4575B4",
+            mid = "grey90", high = "#D73027", midpoint = 1,
+            guide = "legend"
+        ) +
+        ggplot2::labs(
+            title = plot_title,
+            subtitle = plot_subtitle,
+            x = "",
+            y = "",
+            colour = "Relative\nFrequency",
+            size = "Relative\nFrequency"
+        ) +
+        ggplot2::theme_minimal() +
+        theme(
+            panel.grid.major = element_line(
+                colour = "grey80", linewidth = 0.1, linetype = 2
+            ),
+            axis.text.x = element_text(size = 16, face = "bold"),
+            axis.text.y = element_text(size = 16, face = "bold"),
+            plot.title = element_text(size = 20, face = "bold"),
+            plot.subtitle = element_text(size = 16, face = "italic")
+        )
+}
 
-# percent of cells in each cellular neighbourhood
-pheatmap::pheatmap(plot_data * 100, 
-         color = viridis(10, option = "H"),
-         cluster_cols = FALSE,
-         cluster_rows = FALSE,
-         display_numbers = TRUE, 
-         number_format = "%.2f",
-         number_color = "black")
-
-# scaled per celltype across each cellular neighbourhood
-pheatmap::pheatmap(plot_data, 
-         color = colorRampPalette(c("dark blue", "white", "dark red"))(25), 
-         scale = "column",
-         cluster_cols = FALSE,
-         cluster_rows = FALSE
-         )
 
 
 cn_enrich_heatmap <- function(spe_obj,
@@ -737,56 +757,6 @@ cn_enrich_heatmap <- function(spe_obj,
         )
 }
 
-cn_enrich_bubble <- function(spe_obj,
-                             cell_label = "manual_gating",
-                             cn_label = "delaunay_cn_clusters",
-                             plot_title = "Cell Neighbourhood Enrichment",
-                             plot_subtitle = cn_label,
-                             rev_cells = FALSE,
-                             limit = c(0.25, 4)) {
-    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
-    tab <- table(df[, cell_label], df[, cn_label])
-    tab <- tab / rowSums(tab) %*% t(colSums(tab)) * sum(tab)
-    tab <- as.data.frame(tab)
-    
-    if (rev_cells) cell_order <- rev(levels(tab$Var1)) else cell_order <- levels(tab$Var1)
-    
-    tab <- tab %>%
-        dplyr::mutate(
-            cellType = factor(Var1, levels = cell_order),
-            region = Var2,
-            Freq2 = pmax(pmin(Freq, limit[2]), limit[1])
-        )
-    
-    tab %>%
-        ggplot(
-            aes(x = cn_label, y = cell_label, colour = Freq2, size = Freq2)
-        ) +
-        ggplot2::geom_point() +
-        ggplot2::scale_colour_gradient2(
-            low = "#4575B4",
-            mid = "grey90", high = "#D73027", midpoint = 1,
-            guide = "legend"
-        ) +
-        ggplot2::labs(
-            title = plot_title,
-            subtitle = plot_subtitle,
-            x = "",
-            y = "",
-            colour = "Relative\nFrequency",
-            size = "Relative\nFrequency"
-        ) +
-        ggplot2::theme_minimal() +
-        theme(
-            panel.grid.major = element_line(
-                colour = "grey80", linewidth = 0.1, linetype = 2
-            ),
-            axis.text.x = element_text(size = 16, face = "bold"),
-            axis.text.y = element_text(size = 16, face = "bold"),
-            plot.title = element_text(size = 20, face = "bold"),
-            plot.subtitle = element_text(size = 16, face = "italic")
-        )
-}
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
