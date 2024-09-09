@@ -372,6 +372,12 @@ dev.off()
 rm(outplot, plot_interaction_graphs)
 
 # SPATIAL COMMUNITY ANALYSIS ---------------------------------------------------
+io$outputs$temp_ca <- nd(
+  directory_name = "spatial_communities",
+  path = io$outputs$temp_out,
+  add_timestamp = FALSE
+)
+
 # This method was first described in:
 # Jackson, H. W. et al. The single-cell pathology landscape of breast cancer. Nature 578, 615–620 (2020).
 #
@@ -396,7 +402,7 @@ lab_spe <- detectCommunity(
 )
 
 pdf(
-  file = nf("spatial_communities.pdf", io$outputs$temp_out),
+  file = nf("spatial_communities.pdf", io$outputs$temp_ca),
   width = 10,
   height = 35,
   onefile = TRUE
@@ -470,7 +476,7 @@ plot_params <- expand.grid(
 tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
 
 pdf(
-  file = nf("spatial_community_main_exprs.pdf", io$outputs$temp_out),
+  file = nf("spatial_community_main_exprs.pdf", io$outputs$temp_ca),
   width = 5,
   height = 10,
   onefile = TRUE
@@ -485,7 +491,7 @@ plot_params$anno <- "manual_gating"
 tosave <- pmap(plot_params, plot_ca_exprs, spe_obj = lab_spe)
 
 pdf(
-  file = nf("spatial_community_fine_exprs.pdf", io$outputs$temp_out),
+  file = nf("spatial_community_fine_exprs.pdf", io$outputs$temp_ca),
   width = 10,
   height = 10,
   onefile = TRUE
@@ -499,22 +505,21 @@ dev.off()
 rm(p, plot_params, tosave, plot_ca_exprs)
 
 # CELLULAR NEIGHBORHOOD ANALYSIS -----------------------------------------------
-# Rather than clustering solely based on the interaction graph this method first
+# Rather than clustering solely based on the interaction graph, we can also
 # aggregates cells based on information contained in their direct neighbourhood and
-# then performs clustering to define cellular neighbourhoods.
+# then perform clustering to define cellular neighbourhoods.
 #
-# This method we will employ here has previously been used in:
+# This method has previously been used in the following studies:
 #
 # Goltsev et al. 2018. Cell 174: 968–81.
 # Schürch et al. 2020. Cell 182: 1341–59.
 #
-# There are two way to aggregate cell neighbour information:
+# There are two types of cell neighbour information we can use:
 #
-# 1. For each cell, compute the fraction of cells of a certain type among its neighbours.
-# 2. For each cell, aggregate (mean, median, etc.) the expression counts across all neighbouring cells.
-#
-# Both methods will be used independently to define cellular neighbourhoods.
+# 1. The fraction of each cell type in the defined neighbourhood.
+# 2. The aggregated (mean, median, etc.) expression for each cell type in the defined neighbourhood.
 
+# Neighbourhoods by cell type fractions:
 lab_spe <- aggregateNeighbors(
   object = lab_spe,
   colPairName = "delaunay_50",
@@ -538,6 +543,49 @@ lab_spe$delaunay_cn_clusters <- as.factor(cn_kmeans$cluster)
 set.seed(1234)
 cn_kmeans <- kmeans(lab_spe$knn_cn, centers = 12)
 lab_spe$knn_cn_clusters <- as.factor(cn_kmeans$cluster)
+
+
+# Neighbourhoods by cell type marker expression:
+lab_spe <- aggregateNeighbors(
+  object = lab_spe,
+  colPairName = "delaunay_50",
+  aggregate_by = "expression",
+  assay_type = "exprs",
+  subset_row = rowData(lab_spe)$name %in% unlist(lab_spe@metadata$labels$markers),
+  name = "delaunay_cn_exprs"
+)
+
+lab_spe$delaunay_cn_exprs <- as.matrix(lab_spe$delaunay_cn_exprs)
+lab_spe$delaunay_cn_exprs[which(is.na(lab_spe$delaunay_cn_exprs))] <- 0
+
+lab_spe <- aggregateNeighbors(
+  object = lab_spe,
+  colPairName = "k_15",
+  aggregate_by = "expression",
+  assay_type = "exprs",
+  subset_row = rowData(lab_spe)$name %in% unlist(lab_spe@metadata$labels$markers),
+  name = "knn_cn_exprs"
+)
+
+lab_spe$knn_cn_exprs <- as.matrix(lab_spe$knn_cn_exprs)
+lab_spe$knn_cn_exprs[which(is.na(lab_spe$knn_cn_exprs))] <- 0
+
+set.seed(1234)
+cn_kmeans <- kmeans(lab_spe$delaunay_cn_exprs, centers = 12)
+lab_spe$delaunay_cn_exprs_clusters <- as.factor(cn_kmeans$cluster)
+
+set.seed(1234)
+cn_kmeans <- kmeans(lab_spe$knn_cn_exprs, centers = 12)
+lab_spe$knn_cn_exprs_clusters <- as.factor(cn_kmeans$cluster)
+
+rm(cn_kmeans)
+
+# VISUALISE CELLULAR NEIGHBORHOODS ---------------------------------------------
+io$outputs$temp_cn <- nd(
+  directory_name = "cellular_neighbourhoods",
+  path = io$outputs$temp_out,
+  add_timestamp = FALSE
+)
 
 plot_cn <- function(spe_obj,
                     node_label = "manual_gating",
@@ -580,46 +628,66 @@ plot_cn <- function(spe_obj,
   return(out)
 }
 
-io$plots$delaunay_cn <- plot_cn(
+# Delaunay graph neighbourhoods
+pdf(
+  file = nf("delaunay_cn.pdf", io$outputs$temp_cn),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+plot_cn(
   spe_obj = lab_spe,
   node_label = "delaunay_cn_clusters",
   plot_subtitle = glue::glue(
-    "graph (max_dist): Delanuay (50)",
-    "celltype label: manual_gating",
+    "graph: Delanuay (50)",
+    "neighbour measure: cell fraction",
+    "cell label: manual_gating",
     .sep = "\n"
   )
 )
 
-io$plots$knn_cn <- plot_cn(
+plot_cn(
+  spe_obj = lab_spe,
+  node_label = "delaunay_cn_exprs_clusters",
+  plot_subtitle = glue::glue(
+    "graph: Delanuay (50)",
+    "neighbour measure: marker expression",
+    "cell label: manual_gating",
+    .sep = "\n"
+  )
+)
+dev.off()
+
+# KNN graph neighbourhoods
+pdf(
+  file = nf("knn_cn.pdf", io$outputs$temp_cn),
+  width = 20,
+  height = 15,
+  onefile = TRUE
+)
+plot_cn(
   spe_obj = lab_spe,
   node_label = "knn_cn_clusters",
   plot_subtitle = glue::glue(
-    "graph (max_dist): KNN (15)",
-    "celltype label: manual_gating",
+    "graph: KNN (15)",
+    "neighbour measure: cell fraction",
+    "cell label: manual_gating",
     .sep = "\n"
   )
 )
-
-pdf(
-  file = nf("delaunay_cellular_neighborhoods.pdf", io$outputs$temp_out),
-  width = 20,
-  height = 15,
-  onefile = TRUE
+plot_cn(
+  spe_obj = lab_spe,
+  node_label = "knn_cn_exprs_clusters",
+  plot_subtitle = glue::glue(
+    "graph: KNN (15)",
+    "neighbour measure: marker expression",
+    "cell label: manual_gating",
+    .sep = "\n"
+  )
 )
-print(io$plots$delaunay_cn)
 dev.off()
 
-pdf(
-  file = nf("knn_cellular_neighborhoods.pdf", io$outputs$temp_out),
-  width = 20,
-  height = 15,
-  onefile = TRUE
-)
-print(io$plots$knn_cn)
-dev.off()
-
-rm(cn_kmeans)
-
+# VISUALISE CELLULAR NEIGHBORHOOD ENRICHMENT -----------------------------------
 cn_enrich_bubble <- function(spe_obj,
                              cell_label = "manual_gating",
                              cn_label = "delaunay_cn_clusters",
@@ -673,6 +741,8 @@ cn_enrich_bubble <- function(spe_obj,
 }
 
 cn_enrich_heatmap <- function(spe_obj,
+                              filter_col = NULL,
+                              filter_val = NULL,
                               cell_label = "manual_gating",
                               cn_label = "delaunay_cn_clusters",
                               scale_on = c("cell", "cn", "none"),
@@ -682,10 +752,30 @@ cn_enrich_heatmap <- function(spe_obj,
                               show_text = TRUE,
                               rev_cells = FALSE,
                               plot_title = "Cell Neighbourhood Enrichment",
-                              plot_subtitle = cn_label,
-                              plot_caption = ifelse(show_text, "* Tile text denotes ncells", ""),
+                              plot_caption = ifelse(show_text, "*Tile text denotes ncells", ""),
                               fill_lab = ifelse(scale_on == "none", "", "z-score")) {
-  df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+  data_info <- list(
+    graph = str_split_i(cn_label, "_", 1),
+    neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
+    samples = "samples: All"
+  )
+
+  df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
+
+  if (!is.null(filter_col) & !is.null(filter_val)) {
+    df <- df %>%
+      dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
+
+    filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
+    data_info$samples <- paste0(filter_col, ": ", filt_vals)
+  }
+
+  data_info <- glue::glue(
+    "graph: {data_info$graph}",
+    "neighbour measure: {data_info$neighbor_measure}",
+    "{data_info$samples}",
+    .sep = "\n"
+  )
 
   lab_df <- table(df[, cn_label], df[, cell_label]) %>%
     as.data.frame() %>%
@@ -745,7 +835,7 @@ cn_enrich_heatmap <- function(spe_obj,
     ggplot2::scale_color_identity() +
     labs(
       title = plot_title,
-      subtitle = plot_subtitle,
+      subtitle = data_info,
       caption = plot_caption,
       x = "",
       y = "",
@@ -762,38 +852,70 @@ cn_enrich_heatmap <- function(spe_obj,
     )
 }
 
+
+cn_enrichment <- grep("clusters$", names(colData(lab_spe)), value = T) %>%
+  as.list() %>%
+  purrr::set_names(.) %>%
+  purrr::map(~ {
+    out <- list()
+
+    out$all <- cn_enrich_heatmap(
+      spe_obj = lab_spe,
+      cn_label = .x,
+      clip_min = 0,
+    )
+
+    out$primary <- cn_enrich_heatmap(
+      spe_obj = lab_spe,
+      filter_col = "surgery",
+      filter_val = "Prim",
+      cn_label = .x,
+      clip_min = 0
+    )
+
+    out$recurrent <- cn_enrich_heatmap(
+      spe_obj = lab_spe,
+      filter_col = "surgery",
+      filter_val = "Rec",
+      cn_label = .x,
+      clip_min = 0
+    )
+    return(out)
+  }) %>%
+  purrr::list_flatten()
+
+
 pdf(
-  file = nf("cn_enrichment_heatmaps.pdf", io$outputs$temp_out),
+  file = nf("delaunay_cn_enrichment.pdf", io$outputs$temp_cn),
   width = 10,
   height = 10,
   onefile = TRUE
 )
-
-cn_enrich_heatmap(
-  spe_obj = lab_spe,
-  cn_label = "delaunay_cn_clusters",
-  scale_on = "cell",
-  clip_min = 0,
-  plot_title = "Cell Neighbourhood Enrichment",
-  plot_subtitle = "Delaunay (50)"
-)
-
-cn_enrich_heatmap(
-  spe_obj = lab_spe,
-  cn_label = "knn_cn_clusters",
-  scale_on = "cell",
-  clip_min = 0,
-  plot_title = "Cell Neighbourhood Enrichment",
-  plot_subtitle = "KNN (15)"
-)
-
+print(cn_enrichment[grep("^delaunay_", names(cn_enrichment))])
 dev.off()
 
-plot_cells <- function(spe_obj,
-                       filter_col = "sample_id",
-                       filter_val,
-                       cluster_lab = "delaunay_cn_clusters",
-                       anno = c("fine", "main")) {
+pdf(
+  file = nf("knn_cn_enrichment.pdf", io$outputs$temp_cn),
+  width = 10,
+  height = 10,
+  onefile = TRUE
+)
+print(cn_enrichment[grep("^knn_", names(cn_enrichment))])
+dev.off()
+
+
+plot_cn_labels <- function(spe_obj,
+                           plot_group = "sample_id",
+                           cn_label = "delaunay_cn_clusters",
+                           anno = c("fine", "main")) {
+  if (!plot_group %in% names(colData(spe_obj))) {
+    stop("plot_group not found in colData(spe_obj)")
+  }
+
+  if (!cn_label %in% names(colData(spe_obj))) {
+    stop("cn_label not found in colData(spe_obj)")
+  }
+
   anno_info <- switch(
     EXPR = match.arg(anno, several.ok = FALSE),
     fine = list(
@@ -806,54 +928,93 @@ plot_cells <- function(spe_obj,
     )
   )
 
-  filt_spe <- spe_obj[, spe_obj[[filter_col]] %in% filter_val & !is.na(spe_obj[[anno_info$label]])]
+  data_info <- list(
+    graph = str_split_i(cn_label, "_", 1),
+    neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction")
+  )
+
+  data_info <- glue::glue(
+    "graph: {data_info$graph}",
+    "neighbour measure: {data_info$neighbor_measure}",
+    .sep = "\n"
+  )
+
+  filt_spe <- spe_obj[, !is.na(spe_obj[[anno_info$label]])]
 
   filt_spe <- as_tibble(spatialCoords(filt_spe)) %>%
     dplyr::rename(x = Pos_X, y = Pos_Y) %>%
     cbind(
-      id = filt_spe$sample_id,
-      patient_id = filt_spe$patient,
-      surgery = filt_spe$surgery,
-      cluster = colData(filt_spe)[[cluster_lab]],
+      id = filt_spe[[plot_group]],
+      cluster = filt_spe[[cn_label]],
       label = filt_spe[[anno_info$label]]
     )
 
-  filt_spe %>%
-    ggplot(aes(x = x, y = y, color = label)) +
-    geom_point(size = 2, alpha = 0.75) +
-    facet_wrap(~cluster, ncol = 3) +
-    labs(
-      title = filter_val,
-      subtitle = cluster_lab
-    ) +
-    scale_color_manual(values = anno_info$colors) +
-    IMCfuncs::facetted_comp_bxp_theme() +
-    guides(color = guide_legend(override.aes = list(size = 10))) +
-    theme(
-      legend.position = "right",
-      plot.title = element_text(hjust = 0),
-      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-    )
+  out <- filt_spe %>%
+    group_by(id) %>%
+    group_split(.keep = FALSE)
+  names(out) <- unique(filt_spe$id)
+
+  out <- purrr::imap(out, ~ {
+    .x %>%
+      ggplot(aes(x = x, y = y, color = label)) +
+      geom_point(size = 2, alpha = 0.75) +
+      facet_wrap(~cluster, ncol = 3) +
+      labs(
+        title = .y,
+        subtitle = data_info
+      ) +
+      scale_color_manual(values = anno_info$colors) +
+      IMCfuncs::facetted_comp_bxp_theme() +
+      guides(color = guide_legend(override.aes = list(size = 10))) +
+      theme(
+        legend.position = "right",
+        plot.title = element_text(hjust = 0),
+        plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      )
+  })
+
+  return(out)
 }
 
-
-cn_cluster_plots <- purrr::map(unique(lab_spe$sample_id), ~ {
-  plot_cells(
-    spe_obj = lab_spe,
-    filter_val = .x,
-    cluster_lab = "knn_cn_clusters",
-    anno = "fine"
-  )
-})
-
-
 pdf(
-  file = nf("knn_cn_labelled_plot.pdf", io$outputs$temp_out),
+  file = nf("delaunay_cn_surgery_main.pdf", io$outputs$temp_cn),
   width = 20,
   height = 20,
   onefile = TRUE
 )
-print(cn_cluster_plots)
+plot_cn_labels(
+  spe_obj = lab_spe,
+  plot_group = "surgery",
+  cn_label = "delaunay_cn_clusters",
+  anno = "main"
+)
+plot_cn_labels(
+  spe_obj = lab_spe,
+  plot_group = "surgery",
+  cn_label = "delaunay_cn_exprs_clusters",
+  anno = "main"
+)
+dev.off()
+
+
+pdf(
+  file = nf("knn_cn_surgery_main.pdf", io$outputs$temp_cn),
+  width = 20,
+  height = 20,
+  onefile = TRUE
+)
+plot_cn_labels(
+  spe_obj = lab_spe,
+  plot_group = "surgery",
+  cn_label = "knn_cn_clusters",
+  anno = "main"
+)
+plot_cn_labels(
+  spe_obj = lab_spe,
+  plot_group = "surgery",
+  cn_label = "knn_cn_exprs_clusters",
+  anno = "main"
+)
 dev.off()
 
 # SAVE DATA --------------------------------------------------------------------
