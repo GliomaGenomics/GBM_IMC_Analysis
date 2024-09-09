@@ -677,7 +677,8 @@ cn_enrich_heatmap <- function(spe_obj,
                               cn_label = "delaunay_cn_clusters",
                               scale_on = c("cell", "cn", "none"),
                               clip_min = NULL,
-                              fill_pal = RColorBrewer::brewer.pal(, "BuPu"),
+                              fill_pal = RColorBrewer::brewer.pal(9, "BuPu"),
+                              colbar_outline_col = "grey75",
                               show_text = TRUE,
                               rev_cells = FALSE,
                               plot_title = "Cell Neighbourhood Enrichment",
@@ -733,7 +734,14 @@ cn_enrich_heatmap <- function(spe_obj,
         )
       }
     } +
-    ggplot2::scale_fill_gradientn(colours = fill_pal, na.value = "white") +
+    ggplot2::scale_fill_gradientn(
+        colours = fill_pal, 
+        na.value = "white",
+        guide = guide_colourbar(
+            frame.colour = colbar_outline_col,
+            frame.linewidth = 0.35
+            )
+        ) +
     ggplot2::scale_color_identity() +
     labs(
       title = plot_title,
@@ -753,6 +761,7 @@ cn_enrich_heatmap <- function(spe_obj,
       plot.caption = element_text(size = 12, face = "italic")
     )
 }
+
 
 
 
