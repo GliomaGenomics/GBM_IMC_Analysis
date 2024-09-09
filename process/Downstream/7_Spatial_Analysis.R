@@ -735,13 +735,13 @@ cn_enrich_heatmap <- function(spe_obj,
       }
     } +
     ggplot2::scale_fill_gradientn(
-        colours = fill_pal, 
-        na.value = "white",
-        guide = guide_colourbar(
-            frame.colour = colbar_outline_col,
-            frame.linewidth = 0.35
-            )
-        ) +
+      colours = fill_pal,
+      na.value = "white",
+      guide = guide_colourbar(
+        frame.colour = colbar_outline_col,
+        frame.linewidth = 0.35
+      )
+    ) +
     ggplot2::scale_color_identity() +
     labs(
       title = plot_title,
@@ -762,9 +762,99 @@ cn_enrich_heatmap <- function(spe_obj,
     )
 }
 
+pdf(
+  file = nf("cn_enrichment_heatmaps.pdf", io$outputs$temp_out),
+  width = 10,
+  height = 10,
+  onefile = TRUE
+)
+
+cn_enrich_heatmap(
+  spe_obj = lab_spe,
+  cn_label = "delaunay_cn_clusters",
+  scale_on = "cell",
+  clip_min = 0,
+  plot_title = "Cell Neighbourhood Enrichment",
+  plot_subtitle = "Delaunay (50)"
+)
+
+cn_enrich_heatmap(
+  spe_obj = lab_spe,
+  cn_label = "knn_cn_clusters",
+  scale_on = "cell",
+  clip_min = 0,
+  plot_title = "Cell Neighbourhood Enrichment",
+  plot_subtitle = "KNN (15)"
+)
+
+dev.off()
+
+plot_cells <- function(spe_obj,
+                       filter_col = "sample_id",
+                       filter_val,
+                       cluster_lab = "delaunay_cn_clusters",
+                       anno = c("fine", "main")) {
+  anno_info <- switch(
+    EXPR = match.arg(anno, several.ok = FALSE),
+    fine = list(
+      label = "manual_gating",
+      colors = spe_obj@metadata$v2_colours$cells
+    ),
+    main = list(
+      label = "main_anno_v2",
+      colors = spe_obj@metadata$v2_colours$cell_groups
+    )
+  )
+
+  filt_spe <- spe_obj[, spe_obj[[filter_col]] %in% filter_val & !is.na(spe_obj[[anno_info$label]])]
+
+  filt_spe <- as_tibble(spatialCoords(filt_spe)) %>%
+    dplyr::rename(x = Pos_X, y = Pos_Y) %>%
+    cbind(
+      id = filt_spe$sample_id,
+      patient_id = filt_spe$patient,
+      surgery = filt_spe$surgery,
+      cluster = colData(filt_spe)[[cluster_lab]],
+      label = filt_spe[[anno_info$label]]
+    )
+
+  filt_spe %>%
+    ggplot(aes(x = x, y = y, color = label)) +
+    geom_point(size = 2, alpha = 0.75) +
+    facet_wrap(~cluster, ncol = 3) +
+    labs(
+      title = filter_val,
+      subtitle = cluster_lab
+    ) +
+    scale_color_manual(values = anno_info$colors) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    guides(color = guide_legend(override.aes = list(size = 10))) +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+    )
+}
 
 
+cn_cluster_plots <- purrr::map(unique(lab_spe$sample_id), ~ {
+  plot_cells(
+    spe_obj = lab_spe,
+    filter_val = .x,
+    cluster_lab = "knn_cn_clusters",
+    anno = "fine"
+  )
+})
 
+
+pdf(
+  file = nf("knn_cn_labelled_plot.pdf", io$outputs$temp_out),
+  width = 20,
+  height = 20,
+  onefile = TRUE
+)
+print(cn_cluster_plots)
+dev.off()
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
