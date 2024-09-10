@@ -15,6 +15,7 @@
 
 # PACKAGES ---------------------------------------------------------------------
 library(ggplot2)
+library(patchwork)
 library(viridis)
 library(magrittr)
 library(dplyr)
@@ -1016,6 +1017,169 @@ plot_cn_labels(
   anno = "main"
 )
 dev.off()
+
+# SPATIAL CONTEXT ANALYSIS -----------------------------------------------------
+# The spatial context analysis is a follow-on method to the cellular neighbourhood
+# and identifies tissue regions in which distinct cellular neighbourhoods may be interacting.
+#
+# The method was first introduced and described in:
+#
+# Bhate, Salil S. et al.Cell Systems (2022), 13, 109-130.e6
+#
+# The previously defined CN labels will be used to assign cells to spatial
+# context for a set of CNs, say CN1,.,CNn if more than 90% of the cells in a
+# window of size 100 are assigned to one of those n CNs.
+#
+# This was done using the kNN method in the above paper, however, in our case
+# we will use the cellular neighbours obtained using the Delaunay triangulation
+# graph, where the neighbourhoods are defined by the cell fractions.
+
+# drop_cols <- c("knn_cn_neighborhood_agg", "knn_sc", "knn_sc_filt")
+# colData(lab_spe) <- colData(lab_spe)[, !colnames(colData(lab_spe)) %in% drop_cols]
+# colPair(lab_spe, "k_sc_graph") <- NULL
+
+lab_spe <- aggregateNeighbors(
+  object = lab_spe,
+  colPairName = "delaunay_50",
+  aggregate_by = "metadata",
+  count_by = "delaunay_cn_clusters",
+  name = "delaunay_cn_neighborhood_agg"
+)
+
+lab_spe <- detectSpatialContext(
+  object = lab_spe,
+  entry = "delaunay_cn_neighborhood_agg",
+  threshold = 0.90,
+  name = "delaunay_sc"
+)
+
+cell_threshold <- colData(lab_spe)[, c("sample_id")] %>%
+  as.data.frame() %>%
+  group_by_all() %>%
+  dplyr::count() %>%
+  pull(n) %>%
+  mean() * 0.1
+
+cell_threshold <- round(cell_threshold)
+
+
+lab_spe <- filterSpatialContext(
+  object = lab_spe,
+  entry = "delaunay_sc",
+  group_by = "patient",
+  group_threshold = 3,
+  cells_threshold = cell_threshold,
+  name = "delaunay_sc_filt"
+)
+
+order_unique_scs <- function(vec, index = FALSE) {
+  unique_vec <- na.omit(unique(vec))
+  split_vec <- strsplit(unique_vec, "_")
+
+  max_len <- max(sapply(split_vec, length))
+
+  padded_matrix <- t(sapply(split_vec, \(x) as.numeric(c(x, rep(NA, max_len - length(x))))))
+  padded_matrix <- as.data.frame(padded_matrix)
+  padded_matrix$length <- apply(padded_matrix, 1, \(x) length(which(!is.na(x))))
+
+  order_cols_by <- c(
+    grep("(?i)^(v1|length)$", colnames(padded_matrix), value = TRUE),
+    grep("(?i)^(v1|length)$", colnames(padded_matrix), value = TRUE, invert = TRUE)
+  )
+
+
+  orderd_val <- padded_matrix %>%
+    dplyr::arrange(dplyr::across(dplyr::all_of(order_cols_by))) %>%
+    dplyr::select(-length) %>%
+    tidyr::unite(col = "ordered_val", dplyr::everything(), sep = "_", na.rm = TRUE) %>%
+    pull(ordered_val)
+
+  ordered_index <- match(orderd_val, unique_vec)
+
+  if (index) {
+    return(ordered_index)
+  } else {
+    return(orderd_val)
+  }
+}
+
+lab_spe$delaunay_sc_filt <- factor(
+  x = lab_spe$delaunay_sc_filt,
+  levels = order_unique_scs(lab_spe$delaunay_sc_filt)
+)
+
+
+col_sc <- setNames(
+  colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_sc_filt))),
+  levels(lab_spe$delaunay_sc_filt)
+)
+
+col_cn <- setNames(
+  colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_cn_clusters))),
+  levels(lab_spe$delaunay_cn_clusters)
+)
+
+# VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
+plotSpatial(lab_spe[, lab_spe$surgery == "Prim"],
+  node_color_by = "delaunay_sc_filt",
+  img_id = "sample_id",
+  node_size_fix = 0.5,
+  ncols = 3
+) +
+  labs(
+    title = "Filtered Spatial Contexts - Primary Samples",
+    subtitle = glue::glue(
+      "graph method: delaunay triangulation",
+      "min context per patient: 3",
+      "min cells per context: {cell_threshold}",
+      .sep = "\n"
+    )
+  ) +
+  scale_color_manual(values = col_sc) +
+  IMCfuncs::facetted_comp_bxp_theme() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0),
+    plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(size = 10)
+    )
+  )
+
+
+
+plotSpatialContext(
+    object = lab_spe[, lab_spe$surgery == "Prim"],
+    entry = "delaunay_sc_filt",
+    group_by = "sample_id",
+    edge_color_fix = "grey75",
+    node_label_color_by = "n_cells",
+    node_color_by = "n_cells",
+    node_size_fix = "10",
+) +
+    scale_color_viridis() +
+    labs(
+        title = "Filtered Spatial Contexts - Primary Samples",
+        subtitle = glue::glue(
+            "graph method: delaunay triangulation",
+            "min context per patient: 3",
+            "min cells per context: {cell_threshold}",
+            .sep = "\n"
+        )
+    ) +
+    IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10,) +
+    theme(
+        legend.position = "right",
+        legend.title = element_text(size = 20, face = "bold"),
+        plot.title = element_text(hjust = 0),
+        plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank()
+    )
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
