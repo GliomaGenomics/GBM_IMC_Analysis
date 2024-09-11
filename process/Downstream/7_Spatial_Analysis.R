@@ -1028,11 +1028,11 @@ dev.off()
 #
 # The previously defined CN labels will be used to assign cells to spatial
 # context for a set of CNs, say CN1,.,CNn if more than 90% of the cells in a
-# window of size 100 are assigned to one of those n CNs.
+# window of size 100 are assigned to one of those CNs.
 #
 # This was done using the kNN method in the above paper, however, in our case
 # we will use the cellular neighbours obtained using the Delaunay triangulation
-# graph, where the neighbourhoods are defined by the cell fractions.
+# graph, and where the neighbourhoods were defined by the cell fractions.
 
 # drop_cols <- c("knn_cn_neighborhood_agg", "knn_sc", "knn_sc_filt")
 # colData(lab_spe) <- colData(lab_spe)[, !colnames(colData(lab_spe)) %in% drop_cols]
@@ -1053,16 +1053,17 @@ lab_spe <- detectSpatialContext(
   name = "delaunay_sc"
 )
 
+# determine a minimum cell threshold to filter the spatial contexts
 cell_threshold <- colData(lab_spe)[, c("sample_id")] %>%
   as.data.frame() %>%
   group_by_all() %>%
   dplyr::count() %>%
-  pull(n) %>%
-  mean() * 0.1
+  dplyr::ungroup() %>%
+  dplyr::summarise(min_cells = round(mean(n) * 0.1)) %>%   
+  pull(min_cells) 
 
-cell_threshold <- round(cell_threshold)
-
-
+# we will filter the spatial context to include only those which are present in
+# at least three separate patients and contain more than the minimum cell threshold.
 lab_spe <- filterSpatialContext(
   object = lab_spe,
   entry = "delaunay_sc",
@@ -1108,7 +1109,6 @@ lab_spe$delaunay_sc_filt <- factor(
   levels = order_unique_scs(lab_spe$delaunay_sc_filt)
 )
 
-
 col_sc <- setNames(
   colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_sc_filt))),
   levels(lab_spe$delaunay_sc_filt)
@@ -1120,6 +1120,12 @@ col_cn <- setNames(
 )
 
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
+io$outputs$temp_sc <- nd(
+    directory_name = "spatial_contexts",
+    path = io$outputs$temp_out,
+    add_timestamp = FALSE
+)
+
 plotSpatial(lab_spe[, lab_spe$surgery == "Prim"],
   node_color_by = "delaunay_sc_filt",
   img_id = "sample_id",
