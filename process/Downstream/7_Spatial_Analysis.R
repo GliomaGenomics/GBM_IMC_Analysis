@@ -1136,82 +1136,124 @@ plot_sc <- function(spe_obj,
                     min_patient_context = 3,
                     min_cells = cell_threshold,
                     plot_subtitle = glue::glue(
-                      "graph method: {graph_method}",
-                      "min context per patient: {min_patient_context}",
-                      "min cells per context: {min_cells}",
-                      .sep = "\n"
+                        "graph method: {graph_method}",
+                        "min context per patient: {min_patient_context}",
+                        "min cells per context: {min_cells}",
+                        .sep = "\n"
                     ),
                     plot_caption = "*NA points did not meet the filtering criteria") {
-  if (spe_filt_col == "surgery") {
-    sample_label <- ifelse(
-      length(unique(spe_obj[[spe_filt_col]])) == 2, "All Samples",
-      ifelse(unique(spe_obj[[spe_filt_col]]) == "Prim", "Primary Samples", "Recurrent Samples")
-    )
-    plot_title <- paste(plot_title, sample_label, sep = " - ")
-  } else {
-    plot_title <- paste(plot_title, "All Samples", sep = " - ")
-  }
-
-  spatial_locs <- imcRtools::plotSpatial(
-    object = spe_obj,
-    node_color_by = node_label,
-    img_id = image_id,
-    ncols = 3
-  ) +
-    ggplot2::labs(
-      title = plot_title,
-      subtitle = plot_subtitle,
-      caption = plot_caption
+    if (!spe_filt_col %in% names(colData(spe_obj))) stop("Filter column not found in colData")
+    
+    filt_labs <- unique(spe_obj[[spe_filt_col]])
+    
+    if (spe_filt_col == "surgery") {
+        sample_label <- ifelse(
+            length(filt_labs) > 1, "All Samples",
+            ifelse(filt_labs == "Prim", "Primary Samples", "Recurrent Samples")
+        )
+        plot_title <- paste(plot_title, sample_label, sep = " - ")
+    } else if (spe_filt_col %in% c("region_type", "region_type_new")) {
+        
+        
+        sample_label <- ifelse(
+            test = length(filt_labs) > 1, 
+            yes = "All Regions", 
+            no = paste0(stringr::str_to_title(unlist(strsplit(filt_labs, "_"))), collapse = "_")
+        )
+        
+        sample_label <- paste(sample_label, "Regions", sep = " ")
+        
+        plot_title <- paste(plot_title, sample_label, sep = " - ")
+    } else {
+        plot_title <- paste(plot_title, "All Samples", sep = " - ")
+    }
+    
+    spatial_locs <- imcRtools::plotSpatial(
+        object = spe_obj,
+        node_color_by = node_label,
+        img_id = image_id,
+        ncols = 3
     ) +
-    scale_color_manual(values = node_colours) +
-    IMCfuncs::facetted_comp_bxp_theme() +
-    theme(
-      legend.position = "right",
-      plot.title = element_text(hjust = 0),
-      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-      plot.caption = element_text(size = 10, face = "italic")
+        ggplot2::labs(
+            title = plot_title,
+            subtitle = plot_subtitle,
+            caption = plot_caption
+        ) +
+        scale_color_manual(values = node_colours) +
+        IMCfuncs::facetted_comp_bxp_theme() +
+        theme(
+            legend.position = "right",
+            plot.title = element_text(hjust = 0),
+            plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+            plot.caption = element_text(size = 10, face = "italic")
+        ) +
+        guides(
+            color = guide_legend(
+                override.aes = list(size = 10)
+            )
+        )
+    
+    
+    sc_graph <- plotSpatialContext(
+        object = spe_obj,
+        entry = node_label,
+        group_by = image_id,
+        edge_color_fix = "grey75",
+        node_label_color_by = "n_cells",
+        node_color_by = "n_cells",
+        node_size_fix = "10",
     ) +
-    guides(
-      color = guide_legend(
-        override.aes = list(size = 10)
-      )
+        scale_color_viridis() +
+        ggplot2::labs(
+            title = plot_title,
+            subtitle = plot_subtitle
+        ) +
+        IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
+        theme(
+            legend.position = "right",
+            legend.title = element_text(size = 20, face = "bold"),
+            plot.title = element_text(hjust = 0),
+            plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+            axis.ticks = element_blank(),
+            axis.text.x = element_blank(),
+            axis.text.y = element_blank(),
+            axis.title = element_blank()
+        )
+    
+    return(
+        list(
+            locs = spatial_locs,
+            graph = sc_graph
+        )
     )
-
-
-  sc_graph <- plotSpatialContext(
-    object = spe_obj,
-    entry = node_label,
-    group_by = image_id,
-    edge_color_fix = "grey75",
-    node_label_color_by = "n_cells",
-    node_color_by = "n_cells",
-    node_size_fix = "10",
-  ) +
-    scale_color_viridis() +
-    ggplot2::labs(
-      title = plot_title,
-      subtitle = plot_subtitle
-    ) +
-    IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
-    theme(
-      legend.position = "right",
-      legend.title = element_text(size = 20, face = "bold"),
-      plot.title = element_text(hjust = 0),
-      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-      axis.ticks = element_blank(),
-      axis.text.x = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title = element_blank()
-    )
-
-  return(
-    list(
-      locs = spatial_locs,
-      graph = sc_graph
-    )
-  )
 }
 
+sc_plots <-  list(
+    all = plot_sc(spe_obj = lab_spe), 
+    primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]), 
+    recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
+    )
+
+sc_plots <- list_flatten(sc_plots)
+
+pdf(
+    file = nf("spatial_context_locs.pdf", io$outputs$temp_sc),
+    width = 20,
+    height = 25,
+    onefile = TRUE
+)
+print(sc_plots[grep("(primary|recurrent)_locs$", names(sc_plots))])
+dev.off()
+
+
+pdf(
+    file = nf("spatial_context_graphs.pdf", io$outputs$temp_sc),
+    width = 20,
+    height = 10,
+    onefile = TRUE
+)
+print(sc_plots[grep("_graph$", names(sc_plots))])
+dev.off()
 
 
 # SAVE DATA --------------------------------------------------------------------
