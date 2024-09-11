@@ -1059,8 +1059,8 @@ cell_threshold <- colData(lab_spe)[, c("sample_id")] %>%
   group_by_all() %>%
   dplyr::count() %>%
   dplyr::ungroup() %>%
-  dplyr::summarise(min_cells = round(mean(n) * 0.1)) %>%   
-  pull(min_cells) 
+  dplyr::summarise(min_cells = round(mean(n) * 0.1)) %>%
+  pull(min_cells)
 
 # we will filter the spatial context to include only those which are present in
 # at least three separate patients and contain more than the minimum cell threshold.
@@ -1121,71 +1121,98 @@ col_cn <- setNames(
 
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
 io$outputs$temp_sc <- nd(
-    directory_name = "spatial_contexts",
-    path = io$outputs$temp_out,
-    add_timestamp = FALSE
+  directory_name = "spatial_contexts",
+  path = io$outputs$temp_out,
+  add_timestamp = FALSE
 )
 
-plotSpatial(lab_spe[, lab_spe$surgery == "Prim"],
-  node_color_by = "delaunay_sc_filt",
-  img_id = "sample_id",
-  node_size_fix = 0.5,
-  ncols = 3
-) +
-  labs(
-    title = "Filtered Spatial Contexts - Primary Samples",
-    subtitle = glue::glue(
-      "graph method: delaunay triangulation",
-      "min context per patient: 3",
-      "min cells per context: {cell_threshold}",
-      .sep = "\n"
+plot_sc <- function(spe_obj,
+                    spe_filt_col = "surgery",
+                    node_label = "delaunay_sc_filt",
+                    node_colours = col_sc,
+                    image_id = "sample_id",
+                    plot_title = "Filtered Spatial Contexts",
+                    graph_method = "delaunay triangulation",
+                    min_patient_context = 3,
+                    min_cells = cell_threshold,
+                    plot_subtitle = glue::glue(
+                      "graph method: {graph_method}",
+                      "min context per patient: {min_patient_context}",
+                      "min cells per context: {min_cells}",
+                      .sep = "\n"
+                    ),
+                    plot_caption = "*NA points did not meet the filtering criteria") {
+  if (spe_filt_col == "surgery") {
+    sample_label <- ifelse(
+      length(unique(spe_obj[[spe_filt_col]])) == 2, "All Samples",
+      ifelse(unique(spe_obj[[spe_filt_col]]) == "Prim", "Primary Samples", "Recurrent Samples")
     )
+    plot_title <- paste(plot_title, sample_label, sep = " - ")
+  } else {
+    plot_title <- paste(plot_title, "All Samples", sep = " - ")
+  }
+
+  spatial_locs <- imcRtools::plotSpatial(
+    object = spe_obj,
+    node_color_by = node_label,
+    img_id = image_id,
+    ncols = 3
   ) +
-  scale_color_manual(values = col_sc) +
-  IMCfuncs::facetted_comp_bxp_theme() +
-  theme(
-    legend.position = "right",
-    plot.title = element_text(hjust = 0),
-    plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-  ) +
-  guides(
-    color = guide_legend(
-      override.aes = list(size = 10)
+    ggplot2::labs(
+      title = plot_title,
+      subtitle = plot_subtitle,
+      caption = plot_caption
+    ) +
+    scale_color_manual(values = node_colours) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      plot.caption = element_text(size = 10, face = "italic")
+    ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 10)
+      )
     )
-  )
 
 
-
-plotSpatialContext(
-    object = lab_spe[, lab_spe$surgery == "Prim"],
-    entry = "delaunay_sc_filt",
-    group_by = "sample_id",
+  sc_graph <- plotSpatialContext(
+    object = spe_obj,
+    entry = node_label,
+    group_by = image_id,
     edge_color_fix = "grey75",
     node_label_color_by = "n_cells",
     node_color_by = "n_cells",
     node_size_fix = "10",
-) +
+  ) +
     scale_color_viridis() +
-    labs(
-        title = "Filtered Spatial Contexts - Primary Samples",
-        subtitle = glue::glue(
-            "graph method: delaunay triangulation",
-            "min context per patient: 3",
-            "min cells per context: {cell_threshold}",
-            .sep = "\n"
-        )
+    ggplot2::labs(
+      title = plot_title,
+      subtitle = plot_subtitle
     ) +
-    IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10,) +
+    IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
     theme(
-        legend.position = "right",
-        legend.title = element_text(size = 20, face = "bold"),
-        plot.title = element_text(hjust = 0),
-        plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-        axis.ticks = element_blank(),
-        axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.title = element_blank()
+      legend.position = "right",
+      legend.title = element_text(size = 20, face = "bold"),
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title = element_blank()
     )
+
+  return(
+    list(
+      locs = spatial_locs,
+      graph = sc_graph
+    )
+  )
+}
+
+
 
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
