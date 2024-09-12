@@ -1325,22 +1325,96 @@ saveRDS(interaction_data, nf("cell_interaction_data.rds", io$outputs$temp_ia))
 rm(interactions_classic, interactions_patch)
 
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
+plot_ia <- function(ia_df,
+                    filter_by = c("none", "surgery", "region_type", "region_type_new"),
+                    filter_val = NULL,
+                    count_method = c("classic", "patch"),
+                    label_order = levels(lab_spe$manual_gating)) {
+  filter_on <- match.arg(filter_by, several.ok = FALSE)
 
-plot_data <- interactions_classic %>%
-  as_tibble() %>%
-  group_by(from_label, to_label) %>%
-  summarize(
-    sum_sigval = sum(sigval, na.rm = TRUE),
-    pct = abs(sum_sigval) / n() * 100,
-    type = ifelse(sum_sigval == 0, NA, ifelse(sum_sigval > 0, "Interact", "Avoid")),
-    .groups = "keep"
-  ) %>%
-  ungroup() %>%
-  mutate(
-    across(type, ~ factor(., levels = c("Interact", "Avoid"))),
-    across(pct, ~ ifelse(. == 0, NA, .)),
-    across(c("from_label", "to_label"), ~ factor(., levels = levels(lab_spe$manual_gating)))
+  if (length(filter_val) > 1) stop("Only one filter value can be selected")
+  filter_on_vals <- if (is.null(filter_val)) "none" else filter_val
+
+
+  count_filter <- match.arg(count_method, several.ok = FALSE)
+
+  if (filter_on != "none") {
+    plot_data <- ia_df %>%
+      dplyr::filter(!!sym(filter_on) %in% filter_val) %>%
+      dplyr::filter(count_method == count_filter)
+
+    if (nrow(plot_data) == 0) {
+      stop("No data found for the given filter value")
+    }
+  } else {
+    plot_data <- ia_df %>%
+      dplyr::filter(count_method == count_filter)
+  }
+
+  plot_data <- plot_data %>%
+    dplyr::group_by(from_label, to_label) %>%
+    dplyr::summarize(
+      sum_sigval = sum(sigval, na.rm = TRUE),
+      pct = abs(sum_sigval) / n() * 100,
+      type = ifelse(sum_sigval == 0, NA, ifelse(sum_sigval > 0, "Interacting", "Avoiding")),
+      .groups = "keep"
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(
+      filter_on = filter_on,
+      filter_vals = paste0(filter_on_vals, collapse = ","),
+      count_method = count_filter,
+    ) %>%
+    dplyr::mutate(
+      across(type, ~ factor(., levels = c("Interacting", "Avoiding"))),
+      across(pct, ~ ifelse(. == 0, NA, .)),
+      across(c("from_label", "to_label"), ~ factor(., levels = label_order))
+    )
+
+  return(plot_data)
+}
+
+add_highlight_regions <- function(baseplot,
+                                  groups = rep(
+                                    names(lab_spe@metadata$labels$cell_types),
+                                    lengths(lab_spe@metadata$labels$cell_types)
+                                  ),
+                                  highlight_colors = "black",
+                                  highlight_width = 3) {
+  unique_groups <- unique(groups)
+
+  highlight_regions <- data.frame(
+    group = factor(unique_groups, levels = names(highlight_colors)),
+    xmin = sapply(unique_groups, function(g) min(which(groups == g))) - 0.5,
+    xmax = sapply(unique_groups, function(g) max(which(groups == g))) + 0.5,
+    ymin = sapply(unique_groups, function(g) min(which(groups == g))) - 0.5,
+    ymax = sapply(unique_groups, function(g) max(which(groups == g))) + 0.5,
+    color = highlight_colors[unique(groups)]
   )
+
+  if (length(highlight_colors) == 1) {
+    baseplot +
+      geom_rect(
+        data = highlight_regions,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+        color = highlight_colors, fill = NA,
+        linewidth = highlight_width,
+        inherit.aes = FALSE
+      )
+  } else {
+    baseplot +
+      geom_rect(
+        data = highlight_regions,
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, color = group),
+        fill = NA, linewidth = highlight_width, inherit.aes = FALSE
+      ) +
+      scale_color_manual(name = "Groups", values = highlight_colors)
+  }
+}
+
+
+
+plot_data <- plot_ia(ia_df = interaction_data)
 
 
 p <- plot_data %>%
@@ -1353,12 +1427,18 @@ p <- plot_data %>%
     linewidth = 0.1, linetype = 2
   ) +
   ggplot2::scale_fill_gradientn(
-    colours = rev(c("#7F6000", "#BF9000", "#FFD966", "#FFE699", "#FFF2CC")),
+    colours = c("#FFF2CC", "#FFE699", "#FFD966", "#BF9000", "#7F6000"),
     na.value = "white",
     name = " ",
     guide = guide_colourbar(
-      frame.colour = "grey75",
-      frame.linewidth = 0.35
+      theme = theme(
+        legend.key.height = unit(5, "cm"),
+        legend.key.width = unit(1, "cm"),
+      ),
+      frame.colour = "black",
+      frame.linewidth = 0.35,
+      ticks.colour = "black",
+      ticks.linewidth = 0.35
     )
   ) +
   geom_point(
@@ -1366,7 +1446,7 @@ p <- plot_data %>%
     fill = "white", shape = 21, stroke = 0.5, na.rm = TRUE
   ) +
   scale_color_manual(
-    values = c("Interact" = "darkgreen", "Avoid" = "darkred"),
+    values = c("Interacting" = "darkgreen", "Avoiding" = "darkred"),
     name = "",
     na.translate = FALSE
   ) +
@@ -1379,7 +1459,7 @@ p <- plot_data %>%
       "p threshold: 0.01",
       .sep = "\n"
     ),
-    caption = "*only significant interactions are shown"
+    caption = "*white tiles denote non-significant interactions"
   ) +
   ggplot2::xlab("from cell type ...") +
   ggplot2::ylab("to cell type ...") +
@@ -1395,20 +1475,26 @@ p <- plot_data %>%
   )
 
 
-p$layers[[2]]$aes_params$fill <- ifelse(plot_data$type == "Interact", "darkgreen", "darkred")
+p$layers[[2]]$aes_params$fill <- ifelse(plot_data$type == "Interacting", "darkgreen", "darkred")
 
 
-p +
+p <- p +
   guides(
     color = guide_legend(
+      order = 1,
       override.aes = list(
         fill = c("darkgreen", "darkred"),
         size = 12
       )
     ),
     size = guide_legend(
+      order = 2,
       override.aes = list(fill = "black")
     )
   )
+
+
+
+
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
