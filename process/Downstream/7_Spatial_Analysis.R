@@ -1266,6 +1266,12 @@ dev.off()
 # As with the previous analysis we will use the Delaunay triangulation graph to
 # define the cell interactions.
 
+io$outputs$temp_ia <- nd(
+  directory_name = "cellular_interactions",
+  path = io$outputs$temp_out,
+  add_timestamp = FALSE
+)
+
 library(scales)
 
 interactions_classic <- testInteractions(
@@ -1291,17 +1297,32 @@ interactions_patch <- testInteractions(
   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
 )
 
+interaction_data <- bind_rows(
+  {
+    interactions_classic %>%
+      as_tibble() %>%
+      mutate(count_method = "classic")
+  },
+  {
+    interactions_patch %>%
+      as_tibble() %>%
+      mutate(count_method = "patch")
+  }
+)
 
-interactions_classic %>%
+interaction_data <- colData(lab_spe)[, c(
+  "sample_id", "patient", "surgery",
+  "region_type", "region_type_new"
+)] %>%
   as_tibble() %>%
-  View()
-group_by(from_label, to_label) %>%
-  summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
-  ggplot() +
-  geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
-  scale_fill_gradient2(low = "darkblue", mid = "white", high = "darkred") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  dplyr::distinct() %>%
+  dplyr::rename("group_by" = sample_id) %>%
+  dplyr::left_join(x = interaction_data, by = "group_by")
 
+
+saveRDS(interaction_data, nf("cell_interaction_data.rds", io$outputs$temp_ia))
+
+rm(interactions_classic, interactions_patch)
 
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
 
@@ -1323,71 +1344,71 @@ plot_data <- interactions_classic %>%
 
 
 p <- plot_data %>%
-    ggplot(
-        aes(x = from_label, y = to_label)
-    ) +
-    geom_tile(
-        aes(fill = pct),
-        color = "grey50",
-        linewidth = 0.1, linetype = 2
-    ) +
-    ggplot2::scale_fill_gradientn(
-        colours = rev(c("#7F6000", "#BF9000", "#FFD966", "#FFE699", "#FFF2CC")),
-        na.value = "white",
-        name = " ",
-        guide = guide_colourbar(
-            frame.colour = "grey75",
-            frame.linewidth = 0.35
-        )
-    ) +
-    geom_point(
-        aes(size = pct, color = type),
-        fill = "white", shape = 21, stroke = 0.5, na.rm = TRUE
-    ) +
-    scale_color_manual(
-        values = c("Interact" = "darkgreen", "Avoid" = "darkred"),
-        name = "",
-        na.translate = FALSE
-    ) +
-    scale_size_continuous(name = "% ROI\nsignificant\ninteractions\n", range = c(3, 12)) +
-    ggplot2::labs(
-        title = "Cell-Cell Interactions - All Samples",
-        subtitle = glue::glue(
-            "graph: delaunay triangulation",
-            "count method: classic",
-            "p threshold: 0.01",
-            .sep = "\n"
-        ),
-        caption = "*only significant interactions are shown"
-    ) +
-    ggplot2::xlab("from cell type ...") +
-    ggplot2::ylab("to cell type ...") +
-    theme_minimal() +
-    theme(
-        panel.grid.major = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 16, face = "bold"),
-        axis.text.y = element_text(size = 16, face = "bold"),
-        axis.title = element_text(size = 20, face = "bold", colour = "grey50"),
-        plot.title = element_text(size = 20, face = "bold"),
-        plot.subtitle = element_text(size = 16, face = "italic"),
-        plot.caption = element_text(size = 12, face = "italic")
+  ggplot(
+    aes(x = from_label, y = to_label)
+  ) +
+  geom_tile(
+    aes(fill = pct),
+    color = "grey50",
+    linewidth = 0.1, linetype = 2
+  ) +
+  ggplot2::scale_fill_gradientn(
+    colours = rev(c("#7F6000", "#BF9000", "#FFD966", "#FFE699", "#FFF2CC")),
+    na.value = "white",
+    name = " ",
+    guide = guide_colourbar(
+      frame.colour = "grey75",
+      frame.linewidth = 0.35
     )
+  ) +
+  geom_point(
+    aes(size = pct, color = type),
+    fill = "white", shape = 21, stroke = 0.5, na.rm = TRUE
+  ) +
+  scale_color_manual(
+    values = c("Interact" = "darkgreen", "Avoid" = "darkred"),
+    name = "",
+    na.translate = FALSE
+  ) +
+  scale_size_continuous(name = "% ROI\nsignificant\ninteractions\n", range = c(3, 12)) +
+  ggplot2::labs(
+    title = "Cell-Cell Interactions - All Samples",
+    subtitle = glue::glue(
+      "graph: delaunay triangulation",
+      "count method: classic",
+      "p threshold: 0.01",
+      .sep = "\n"
+    ),
+    caption = "*only significant interactions are shown"
+  ) +
+  ggplot2::xlab("from cell type ...") +
+  ggplot2::ylab("to cell type ...") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 16, face = "bold"),
+    axis.text.y = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 20, face = "bold", colour = "grey50"),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 16, face = "italic"),
+    plot.caption = element_text(size = 12, face = "italic")
+  )
 
 
 p$layers[[2]]$aes_params$fill <- ifelse(plot_data$type == "Interact", "darkgreen", "darkred")
 
 
 p +
-    guides(
-        color = guide_legend(
-            override.aes = list(
-                fill = c("darkgreen", "darkred"),
-                size = 12
-            )
-        ),
-        size = guide_legend(
-            override.aes = list(fill = "black")
-        )
+  guides(
+    color = guide_legend(
+      override.aes = list(
+        fill = c("darkgreen", "darkred"),
+        size = 12
+      )
+    ),
+    size = guide_legend(
+      override.aes = list(fill = "black")
     )
+  )
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
