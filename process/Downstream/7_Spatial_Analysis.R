@@ -1136,125 +1136,258 @@ plot_sc <- function(spe_obj,
                     min_patient_context = 3,
                     min_cells = cell_threshold,
                     plot_subtitle = glue::glue(
-                        "graph method: {graph_method}",
-                        "min context per patient: {min_patient_context}",
-                        "min cells per context: {min_cells}",
-                        .sep = "\n"
+                      "graph method: {graph_method}",
+                      "min context per patient: {min_patient_context}",
+                      "min cells per context: {min_cells}",
+                      .sep = "\n"
                     ),
                     plot_caption = "*NA points did not meet the filtering criteria") {
-    if (!spe_filt_col %in% names(colData(spe_obj))) stop("Filter column not found in colData")
-    
-    filt_labs <- unique(spe_obj[[spe_filt_col]])
-    
-    if (spe_filt_col == "surgery") {
-        sample_label <- ifelse(
-            length(filt_labs) > 1, "All Samples",
-            ifelse(filt_labs == "Prim", "Primary Samples", "Recurrent Samples")
-        )
-        plot_title <- paste(plot_title, sample_label, sep = " - ")
-    } else if (spe_filt_col %in% c("region_type", "region_type_new")) {
-        
-        
-        sample_label <- ifelse(
-            test = length(filt_labs) > 1, 
-            yes = "All Regions", 
-            no = paste0(stringr::str_to_title(unlist(strsplit(filt_labs, "_"))), collapse = "_")
-        )
-        
-        sample_label <- paste(sample_label, "Regions", sep = " ")
-        
-        plot_title <- paste(plot_title, sample_label, sep = " - ")
-    } else {
-        plot_title <- paste(plot_title, "All Samples", sep = " - ")
-    }
-    
-    spatial_locs <- imcRtools::plotSpatial(
-        object = spe_obj,
-        node_color_by = node_label,
-        img_id = image_id,
-        ncols = 3
-    ) +
-        ggplot2::labs(
-            title = plot_title,
-            subtitle = plot_subtitle,
-            caption = plot_caption
-        ) +
-        scale_color_manual(values = node_colours) +
-        IMCfuncs::facetted_comp_bxp_theme() +
-        theme(
-            legend.position = "right",
-            plot.title = element_text(hjust = 0),
-            plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-            plot.caption = element_text(size = 10, face = "italic")
-        ) +
-        guides(
-            color = guide_legend(
-                override.aes = list(size = 10)
-            )
-        )
-    
-    
-    sc_graph <- plotSpatialContext(
-        object = spe_obj,
-        entry = node_label,
-        group_by = image_id,
-        edge_color_fix = "grey75",
-        node_label_color_by = "n_cells",
-        node_color_by = "n_cells",
-        node_size_fix = "10",
-    ) +
-        scale_color_viridis() +
-        ggplot2::labs(
-            title = plot_title,
-            subtitle = plot_subtitle
-        ) +
-        IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
-        theme(
-            legend.position = "right",
-            legend.title = element_text(size = 20, face = "bold"),
-            plot.title = element_text(hjust = 0),
-            plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
-            axis.ticks = element_blank(),
-            axis.text.x = element_blank(),
-            axis.text.y = element_blank(),
-            axis.title = element_blank()
-        )
-    
-    return(
-        list(
-            locs = spatial_locs,
-            graph = sc_graph
-        )
+  if (!spe_filt_col %in% names(colData(spe_obj))) stop("Filter column not found in colData")
+
+  filt_labs <- unique(spe_obj[[spe_filt_col]])
+
+  if (spe_filt_col == "surgery") {
+    sample_label <- ifelse(
+      length(filt_labs) > 1, "All Samples",
+      ifelse(filt_labs == "Prim", "Primary Samples", "Recurrent Samples")
     )
+    plot_title <- paste(plot_title, sample_label, sep = " - ")
+  } else if (spe_filt_col %in% c("region_type", "region_type_new")) {
+    sample_label <- ifelse(
+      test = length(filt_labs) > 1,
+      yes = "All Regions",
+      no = paste0(stringr::str_to_title(unlist(strsplit(filt_labs, "_"))), collapse = "_")
+    )
+
+    sample_label <- paste(sample_label, "Regions", sep = " ")
+
+    plot_title <- paste(plot_title, sample_label, sep = " - ")
+  } else {
+    plot_title <- paste(plot_title, "All Samples", sep = " - ")
+  }
+
+  spatial_locs <- imcRtools::plotSpatial(
+    object = spe_obj,
+    node_color_by = node_label,
+    img_id = image_id,
+    ncols = 3
+  ) +
+    ggplot2::labs(
+      title = plot_title,
+      subtitle = plot_subtitle,
+      caption = plot_caption
+    ) +
+    scale_color_manual(values = node_colours) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      plot.caption = element_text(size = 10, face = "italic")
+    ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 10)
+      )
+    )
+
+
+  sc_graph <- plotSpatialContext(
+    object = spe_obj,
+    entry = node_label,
+    group_by = image_id,
+    edge_color_fix = "grey75",
+    node_label_color_by = "n_cells",
+    node_color_by = "n_cells",
+    node_size_fix = "10",
+  ) +
+    scale_color_viridis() +
+    ggplot2::labs(
+      title = plot_title,
+      subtitle = plot_subtitle
+    ) +
+    IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
+    theme(
+      legend.position = "right",
+      legend.title = element_text(size = 20, face = "bold"),
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+      axis.ticks = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title = element_blank()
+    )
+
+  return(
+    list(
+      locs = spatial_locs,
+      graph = sc_graph
+    )
+  )
 }
 
-sc_plots <-  list(
-    all = plot_sc(spe_obj = lab_spe), 
-    primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]), 
-    recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
-    )
+sc_plots <- list(
+  all = plot_sc(spe_obj = lab_spe),
+  primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]),
+  recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
+)
 
 sc_plots <- list_flatten(sc_plots)
 
 pdf(
-    file = nf("spatial_context_locs.pdf", io$outputs$temp_sc),
-    width = 20,
-    height = 25,
-    onefile = TRUE
+  file = nf("spatial_context_locs.pdf", io$outputs$temp_sc),
+  width = 20,
+  height = 25,
+  onefile = TRUE
 )
 print(sc_plots[grep("(primary|recurrent)_locs$", names(sc_plots))])
 dev.off()
 
 
 pdf(
-    file = nf("spatial_context_graphs.pdf", io$outputs$temp_sc),
-    width = 20,
-    height = 10,
-    onefile = TRUE
+  file = nf("spatial_context_graphs.pdf", io$outputs$temp_sc),
+  width = 20,
+  height = 10,
+  onefile = TRUE
 )
 print(sc_plots[grep("_graph$", names(sc_plots))])
 dev.off()
 
+# CELL INTERACTION ANALYSIS ----------------------------------------------------
+# The cell interaction analysis method we will use was first described in:
+#
+# Schapiro, D. et al. Nat Methods 14, 873–876 (2017).
+#
+# This method computes the averaged cell type/cell type interaction count and
+# compares this count against an empirical null distribution which is generated
+# by permuting all cell labels (while maintaining the tissue structure), across
+# each sample.
+#
+# As with the previous analysis we will use the Delaunay triangulation graph to
+# define the cell interactions.
 
+library(scales)
+
+interactions_classic <- testInteractions(
+  object = lab_spe,
+  group_by = "sample_id",
+  label = "manual_gating",
+  colPairName = "delaunay_50",
+  method = "classic",
+  iter = 1000,
+  p_threshold = 0.01,
+  BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+)
+
+interactions_patch <- testInteractions(
+  object = lab_spe,
+  group_by = "sample_id",
+  label = "manual_gating",
+  colPairName = "delaunay_50",
+  method = "patch",
+  patch_size = 5,
+  iter = 1000,
+  p_threshold = 0.01,
+  BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+)
+
+
+interactions_classic %>%
+  as_tibble() %>%
+  View()
+group_by(from_label, to_label) %>%
+  summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+  ggplot() +
+  geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+  scale_fill_gradient2(low = "darkblue", mid = "white", high = "darkred") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
+
+plot_data <- interactions_classic %>%
+  as_tibble() %>%
+  group_by(from_label, to_label) %>%
+  summarize(
+    sum_sigval = sum(sigval, na.rm = TRUE),
+    pct = abs(sum_sigval) / n() * 100,
+    type = ifelse(sum_sigval == 0, NA, ifelse(sum_sigval > 0, "Interact", "Avoid")),
+    .groups = "keep"
+  ) %>%
+  ungroup() %>%
+  mutate(
+    across(type, ~ factor(., levels = c("Interact", "Avoid"))),
+    across(pct, ~ ifelse(. == 0, NA, .)),
+    across(c("from_label", "to_label"), ~ factor(., levels = levels(lab_spe$manual_gating)))
+  )
+
+
+p <- plot_data %>%
+    ggplot(
+        aes(x = from_label, y = to_label)
+    ) +
+    geom_tile(
+        aes(fill = pct),
+        color = "grey50",
+        linewidth = 0.1, linetype = 2
+    ) +
+    ggplot2::scale_fill_gradientn(
+        colours = rev(c("#7F6000", "#BF9000", "#FFD966", "#FFE699", "#FFF2CC")),
+        na.value = "white",
+        name = " ",
+        guide = guide_colourbar(
+            frame.colour = "grey75",
+            frame.linewidth = 0.35
+        )
+    ) +
+    geom_point(
+        aes(size = pct, color = type),
+        fill = "white", shape = 21, stroke = 0.5, na.rm = TRUE
+    ) +
+    scale_color_manual(
+        values = c("Interact" = "darkgreen", "Avoid" = "darkred"),
+        name = "",
+        na.translate = FALSE
+    ) +
+    scale_size_continuous(name = "% ROI\nsignificant\ninteractions\n", range = c(3, 12)) +
+    ggplot2::labs(
+        title = "Cell-Cell Interactions - All Samples",
+        subtitle = glue::glue(
+            "graph: delaunay triangulation",
+            "count method: classic",
+            "p threshold: 0.01",
+            .sep = "\n"
+        ),
+        caption = "*only significant interactions are shown"
+    ) +
+    ggplot2::xlab("from cell type ...") +
+    ggplot2::ylab("to cell type ...") +
+    theme_minimal() +
+    theme(
+        panel.grid.major = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 16, face = "bold"),
+        axis.text.y = element_text(size = 16, face = "bold"),
+        axis.title = element_text(size = 20, face = "bold", colour = "grey50"),
+        plot.title = element_text(size = 20, face = "bold"),
+        plot.subtitle = element_text(size = 16, face = "italic"),
+        plot.caption = element_text(size = 12, face = "italic")
+    )
+
+
+p$layers[[2]]$aes_params$fill <- ifelse(plot_data$type == "Interact", "darkgreen", "darkred")
+
+
+p +
+    guides(
+        color = guide_legend(
+            override.aes = list(
+                fill = c("darkgreen", "darkred"),
+                size = 12
+            )
+        ),
+        size = guide_legend(
+            override.aes = list(fill = "black")
+        )
+    )
 # SAVE DATA --------------------------------------------------------------------
 # END --------------------------------------------------------------------------
