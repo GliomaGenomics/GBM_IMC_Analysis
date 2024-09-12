@@ -1,13 +1,12 @@
 clean_ia_data <- function(ia_df,
                           filter_by = c("none", "surgery", "region_type", "region_type_new"),
-                          filter_val = NULL,
+                          filter_val = NA,
                           count_method = c("classic", "patch"),
                           label_order = levels(lab_spe$manual_gating)) {
   filter_on <- match.arg(filter_by, several.ok = FALSE)
 
   if (length(filter_val) > 1) stop("Only one filter value can be selected")
-  filter_on_vals <- if (is.null(filter_val)) "none" else filter_val
-
+  filter_on_vals <- if (is.na(filter_val)) "none" else filter_val
 
   count_filter <- match.arg(count_method, several.ok = FALSE)
 

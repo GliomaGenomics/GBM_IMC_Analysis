@@ -1327,5 +1327,29 @@ rm(interactions_classic, interactions_patch)
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
 source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
 
+plot_params <- tibble(
+  filter_by = c("none", "surgery", "surgery"),
+  filter_val = c(NA, "Prim", "Rec"),
+  count_method = c("patch")
+)
+
+plot_params <- plot_params %>%
+  mutate(count_method = "classic") %>%
+  bind_rows(plot_params)
+
+ia_plots <- pmap(plot_params, clean_ia_data, ia_df = interaction_data)
+ia_plots <- map(ia_plots, plot_ia)
+
+pdf(
+  file = nf("cell_interactions.pdf", io$outputs$temp_ia),
+  width = 15,
+  height = 15,
+  onefile = TRUE
+)
+print(ia_plots)
+dev.off()
+
 # SAVE DATA --------------------------------------------------------------------
+saveRDS(lab_spe, nf("lab_spe.rds", io$outputs$temp_out))
+
 # END --------------------------------------------------------------------------
