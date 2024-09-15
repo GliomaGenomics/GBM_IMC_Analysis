@@ -255,6 +255,9 @@ for (i in seq(5, 30, 5)) {
   )
 }
 
+# Set the geom point to match the pervious plots
+update_geom_defaults("point", list(alpha = 0.75))
+
 plot_interaction_graphs <- function(spe_obj,
                                     graph_name,
                                     patients = c("64", "67", "71", "82", "84"),
@@ -270,6 +273,7 @@ plot_interaction_graphs <- function(spe_obj,
       img_id = "sample_id",
       colPairName = graph_name,
       nodes_first = FALSE,
+      node_size_fix = 2,
       ncols = 3,
       draw_edges = TRUE,
       flip_y = FALSE,
