@@ -87,6 +87,16 @@ spe <- readRDS(io$inputs$data)
 # Considering the first three regions across each sample and the labelled cells
 lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
+# Load a specific lab_spe object that was previously created:
+
+# lab_spe <- list.files(
+#   path = "outputs/spatial_analysis/2024-09-05T12-01-52",
+#   pattern = "lab_spe",
+#   full.names = TRUE
+# ) %>%
+#   readRDS()
+
+
 # regions <- readRDS(io$inputs$prevelance_out)
 
 # LABELLED CELL COUNTS ---------------------------------------------------------
@@ -249,7 +259,7 @@ plot_interaction_graphs <- function(spe_obj,
                                     graph_name,
                                     patients = c("64", "67", "71", "82", "84"),
                                     node_label = "manual_gating",
-                                    node_colours = spe@metadata$v2_colours$cells) {
+                                    node_colours = spe_obj@metadata$v2_colours$cells) {
   out <- vector(mode = "list", length = length(patients))
   names(out) <- paste("patient", patients, sep = "_")
 
@@ -262,6 +272,7 @@ plot_interaction_graphs <- function(spe_obj,
       nodes_first = FALSE,
       ncols = 3,
       draw_edges = TRUE,
+      flip_y = FALSE,
       edge_color_fix = "grey"
     ) +
       ggtitle(glue::glue("{graph_name} interaction graph")) +
