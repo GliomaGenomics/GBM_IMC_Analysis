@@ -618,6 +618,8 @@ plot_cn <- function(spe_obj,
       object = spe_obj[, spe_obj$patient == patients[[i]] & spe_obj$surgery %in% c("Prim", "Rec")],
       node_color_by = node_label,
       img_id = image_id,
+      node_size_fix = 2,
+      flip_y = FALSE,
       colPairName = NULL,
       ncols = 3
     ) +
@@ -704,76 +706,32 @@ plot_cn(
 dev.off()
 
 # VISUALISE CELLULAR NEIGHBORHOOD ENRICHMENT -----------------------------------
-cn_enrich_bubble <- function(spe_obj,
-                             cell_label = "manual_gating",
-                             cn_label = "delaunay_cn_clusters",
-                             plot_title = "Cell Neighbourhood Enrichment",
-                             plot_subtitle = cn_label,
-                             rev_cells = FALSE,
-                             limit = c(0.25, 4),
-                             min_point = 3,
-                             max_point = 10) {
-  df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
-  tab <- table(df[, cell_label], df[, cn_label])
-  tab <- tab / rowSums(tab) %*% t(colSums(tab)) * sum(tab)
-  tab <- as.data.frame(tab)
-
-  if (rev_cells) cell_order <- rev(levels(tab$Var1)) else cell_order <- levels(tab$Var1)
-
-  tab <- tab %>%
-    dplyr::mutate(
-      cell_label = factor(Var1, levels = cell_order),
-      cn_label = Var2,
-      Freq2 = pmax(pmin(Freq, limit[2]), limit[1])
-    )
-
-  tab %>%
-    ggplot(aes(x = cn_label, y = cell_label)) +
-    ggplot2::geom_point(aes(colour = Freq2, size = Freq2)) +
-    ggplot2::scale_size(range = c(min_point, max_point)) +
-    ggplot2::scale_colour_gradient2(
-      low = "#4575B4",
-      mid = "grey90", high = "#D73027", midpoint = 1,
-      guide = "legend"
-    ) +
-    ggplot2::labs(
-      title = plot_title,
-      subtitle = plot_subtitle,
-      x = "",
-      y = "",
-      colour = "Relative\nFrequency",
-      size = "Relative\nFrequency"
-    ) +
-    ggplot2::theme_minimal() +
-    theme(
-      panel.grid.major = element_line(
-        colour = "grey80", linewidth = 0.1, linetype = 2
-      ),
-      axis.text.x = element_text(size = 16, face = "bold"),
-      axis.text.y = element_text(size = 16, face = "bold"),
-      plot.title = element_text(size = 20, face = "bold"),
-      plot.subtitle = element_text(size = 16, face = "italic")
-    )
-}
-
-cn_enrich_heatmap <- function(spe_obj,
-                              filter_col = NULL,
-                              filter_val = NULL,
-                              cell_label = "manual_gating",
-                              cn_label = "delaunay_cn_clusters",
-                              scale_on = c("cell", "cn", "none"),
-                              clip_min = NULL,
-                              fill_pal = RColorBrewer::brewer.pal(9, "BuPu"),
-                              colbar_outline_col = "grey75",
-                              show_text = TRUE,
-                              rev_cells = FALSE,
-                              plot_title = "Cell Neighbourhood Enrichment",
-                              plot_caption = ifelse(show_text, "*Tile text denotes ncells", ""),
-                              fill_lab = ifelse(scale_on == "none", "", "z-score")) {
+plot_cn_enrichment <- function(spe_obj,
+                               filter_col = NULL,
+                               filter_val = NULL,
+                               cell_label = "manual_gating",
+                               cn_label = "delaunay_cn_clusters",
+                               scale_on = c("cell", "cn", "none"),
+                               clip_min = NULL,
+                               fill_pal = RColorBrewer::brewer.pal(9, "Reds"),
+                               plot_type = c("bubble", "heatmap"),
+                               min_bubble_size = 6,
+                               max_bubble_size = 16,
+                               show_heatmap_text = TRUE,
+                               rev_cells = FALSE,
+                               plot_title = "Cell Neighbourhood Enrichment",
+                               plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text, "*Tile text denotes ncells", ""),
+                               fill_lab = ifelse(scale_on == "none", "", "z-score")) {
   data_info <- list(
+    samples = "samples: All",
     graph = str_split_i(cn_label, "_", 1),
     neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
-    samples = "samples: All"
+    min_zscore = ifelse(!is.null(clip_min), glue::glue("minimum zscore: {clip_min}"), ""),
+    scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+      "cell" = "cell types",
+      "cn" = "neighbourhoods",
+      "none" = "none"
+    )
   )
 
   df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
@@ -787,9 +745,11 @@ cn_enrich_heatmap <- function(spe_obj,
   }
 
   data_info <- glue::glue(
+    "{data_info$samples}",
     "graph: {data_info$graph}",
     "neighbour measure: {data_info$neighbor_measure}",
-    "{data_info$samples}",
+    "{data_info$min_zscore}",
+    "exprs scaled across: {data_info$scale_on_label}",
     .sep = "\n"
   )
 
@@ -816,6 +776,11 @@ cn_enrich_heatmap <- function(spe_obj,
 
   if (!is.null(clip_min)) tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
 
+  scale_min_val <- ifelse(!is.null(clip_min), clip_min, 0)
+  scale_max_val <- max(round(tab$value * 2, ) / 2, na.rm = TRUE)
+  scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
+
+
   tab$fill_color <- fill_pal[as.numeric(cut(tab$value, breaks = length(fill_pal)))]
   tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
 
@@ -826,38 +791,7 @@ cn_enrich_heatmap <- function(spe_obj,
       )
     )
 
-  tab %>%
-    ggplot(aes(x = cn_label, y = cell_label, fill = value)) +
-    geom_tile(colour = "grey50", linewidth = 0.1, linetype = 2) +
-    {
-      if (show_text) {
-        geom_text(
-          aes(label = text_lab, colour = text_color),
-          size = 4,
-          fontface = "bold",
-          na.rm = TRUE,
-          show.legend = FALSE
-        )
-      }
-    } +
-    ggplot2::scale_fill_gradientn(
-      colours = fill_pal,
-      na.value = "white",
-      guide = guide_colourbar(
-        frame.colour = colbar_outline_col,
-        frame.linewidth = 0.35
-      )
-    ) +
-    ggplot2::scale_color_identity() +
-    labs(
-      title = plot_title,
-      subtitle = data_info,
-      caption = plot_caption,
-      x = "",
-      y = "",
-      fill = fill_lab
-    ) +
-    ggplot2::theme_minimal() +
+  outplot_theme <- ggplot2::theme_minimal(base_size = 16) +
     theme(
       panel.grid.major = element_blank(),
       axis.text.x = element_text(size = 16, face = "bold"),
@@ -866,6 +800,86 @@ cn_enrich_heatmap <- function(spe_obj,
       plot.subtitle = element_text(size = 16, face = "italic"),
       plot.caption = element_text(size = 12, face = "italic")
     )
+
+  if (match.arg(plot_type, several.ok = FALSE) == "bubble") {
+    tab %>%
+      ggplot(aes(x = cn_label, y = cell_label)) +
+      geom_tile(fill = "#fffdfa", colour = "grey50", linewidth = 0.1, linetype = 2) +
+      geom_point(
+        aes(size = text_lab, fill = value),
+        shape = 21, colour = "black", stroke = 0.75, na.rm = TRUE
+      ) +
+      ggplot2::scale_size(range = c(min_bubble_size, max_bubble_size)) +
+      ggplot2::scale_fill_gradientn(
+        breaks = scale_breaks,
+        limits = c(scale_min_val, scale_max_val),
+        colours = fill_pal,
+        na.value = "white",
+        guide = guide_colourbar(
+          barwidth = 2, # Increase the width of the colorbar
+          barheight = 15,
+          frame.colour = "black",
+          ticks.colour = "black",
+          ticks.linewidth = 0.35,
+          frame.linewidth = 0.35
+        )
+      ) +
+      labs(
+        title = plot_title,
+        subtitle = data_info,
+        caption = plot_caption,
+        x = "",
+        y = "",
+        fill = fill_lab,
+        size = "ncells"
+      ) +
+      outplot_theme +
+      guides(
+        size = guide_legend(
+          order = 1,
+          override.aes = list(fill = "black")
+        )
+      )
+  } else {
+    tab %>%
+      ggplot(aes(x = cn_label, y = cell_label, fill = value)) +
+      geom_tile(colour = "grey50", linewidth = 0.1, linetype = 2) +
+      {
+        if (show_heatmap_text) {
+          geom_text(
+            aes(label = text_lab, colour = text_color),
+            size = 4,
+            fontface = "bold",
+            na.rm = TRUE,
+            show.legend = FALSE
+          )
+        }
+      } +
+      ggplot2::scale_fill_gradientn(
+        colours = fill_pal,
+        breaks = scale_breaks,
+        limits = c(scale_min_val, scale_max_val),
+        na.value = "white",
+        guide = guide_colourbar(
+          barwidth = 2,
+          barheight = 15,
+          frame.colour = "black",
+          ticks.colour = "black",
+          ticks.linewidth = 0.35,
+          frame.linewidth = 0.35
+        )
+      ) +
+      ggplot2::scale_color_identity() +
+      labs(
+        title = plot_title,
+        subtitle = data_info,
+        caption = plot_caption,
+        x = "",
+        y = "",
+        fill = fill_lab
+      ) +
+      outplot_theme
+  }
 }
 
 
