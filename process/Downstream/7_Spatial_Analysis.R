@@ -719,17 +719,16 @@ plot_cn_enrichment <- function(spe_obj,
                                max_bubble_size = 16,
                                show_heatmap_text = TRUE,
                                rev_cells = FALSE,
-                               plot_title = "Cell Neighbourhood Enrichment",
+                               plot_title = "Cellular Neighborhood Enrichment",
                                plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text, "*Tile text denotes ncells", ""),
-                               fill_lab = ifelse(scale_on == "none", "", "z-score")) {
+                               fill_lab = ifelse(scale_on == "none", "", "zscore")) {
   data_info <- list(
     samples = "samples: All",
     graph = str_split_i(cn_label, "_", 1),
     neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
-    min_zscore = ifelse(!is.null(clip_min), glue::glue("minimum zscore: {clip_min}"), ""),
     scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
       "cell" = "cell types",
-      "cn" = "neighbourhoods",
+      "cn" = "neighborhoods",
       "none" = "none"
     )
   )
@@ -737,6 +736,10 @@ plot_cn_enrichment <- function(spe_obj,
   df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
 
   if (!is.null(filter_col) & !is.null(filter_val)) {
+    if (length(filter_val) > 1) stop("only one filter_val can  be used")
+    if (!filter_col %in% colnames(df)) stop("filter_col not found in df")
+    if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
+
     df <- df %>%
       dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
 
@@ -748,8 +751,9 @@ plot_cn_enrichment <- function(spe_obj,
     "{data_info$samples}",
     "graph: {data_info$graph}",
     "neighbour measure: {data_info$neighbor_measure}",
-    "{data_info$min_zscore}",
     "exprs scaled across: {data_info$scale_on_label}",
+    "minimum zscore: {clip_min}",
+    .null = "n/a",
     .sep = "\n"
   )
 
@@ -774,10 +778,14 @@ plot_cn_enrichment <- function(spe_obj,
 
   if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
 
-  if (!is.null(clip_min)) tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
+  if (!is.null(clip_min)) {
+    tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
+    scale_min_val <- clip_min
+  } else {
+    scale_min_val <- floor(min(tab$value, na.rm = TRUE)) * 2 / 2
+  }
 
-  scale_min_val <- ifelse(!is.null(clip_min), clip_min, 0)
-  scale_max_val <- max(round(tab$value * 2, ) / 2, na.rm = TRUE)
+  scale_max_val <- ceiling(max(tab$value, na.rm = TRUE) * 2) / 2
   scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
 
 
@@ -814,9 +822,8 @@ plot_cn_enrichment <- function(spe_obj,
         breaks = scale_breaks,
         limits = c(scale_min_val, scale_max_val),
         colours = fill_pal,
-        na.value = "white",
         guide = guide_colourbar(
-          barwidth = 2, # Increase the width of the colorbar
+          barwidth = 2,
           barheight = 15,
           frame.colour = "black",
           ticks.colour = "black",
@@ -842,8 +849,12 @@ plot_cn_enrichment <- function(spe_obj,
       )
   } else {
     tab %>%
-      ggplot(aes(x = cn_label, y = cell_label, fill = value)) +
-      geom_tile(colour = "grey50", linewidth = 0.1, linetype = 2) +
+      ggplot(aes(x = cn_label, y = cell_label)) +
+      geom_tile(
+        aes(fill = value),
+        colour = "grey50", linewidth = 0.1, linetype = 2,
+        na.rm = TRUE
+      ) +
       {
         if (show_heatmap_text) {
           geom_text(
@@ -881,6 +892,41 @@ plot_cn_enrichment <- function(spe_obj,
       outplot_theme
   }
 }
+
+
+
+
+plot_cn_enrichment(
+  spe_obj = lab_spe,
+  filter_col = "surgery",
+  filter_val = "Prim",
+  cell_label = "main_anno_v2",
+  scale_on = "cn",
+  clip_min = 0.5
+)
+
+
+plot_cn_enrichment(
+  spe_obj = lab_spe,
+  filter_col = "surgery",
+  filter_val = "Prim",
+  cell_label = "manual_gating",
+  scale_on = "cn",
+  clip_min = 1
+)
+
+
+plot_cn_enrichment(
+  spe_obj = lab_spe,
+  plot_type = "bubble",
+  filter_col = "surgery",
+  filter_val = "Prim",
+  cell_label = "manual_gating",
+  scale_on = "cn",
+  clip_min = 0.5
+)
+
+
 
 
 cn_enrichment <- grep("clusters$", names(colData(lab_spe)), value = T) %>%
