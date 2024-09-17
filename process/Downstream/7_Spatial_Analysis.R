@@ -1088,7 +1088,7 @@ lab_spe <- aggregateNeighbors(
   colPairName = "delaunay_50",
   aggregate_by = "metadata",
   count_by = "delaunay_cn_clusters",
-  name = "delaunay_cn_neighborhood_agg"
+  name = "prim_delaunay_cn_neighborhood_agg"
 )
 
 lab_spe <- detectSpatialContext(
@@ -1099,23 +1099,36 @@ lab_spe <- detectSpatialContext(
 )
 
 # determine a minimum cell threshold to filter the spatial contexts
-cell_threshold <- colData(lab_spe)[, c("sample_id")] %>%
+cell_threshold <- colData(lab_spe)[, c("patient", "surgery", "ROI")] %>%
   as.data.frame() %>%
   group_by_all() %>%
   dplyr::count() %>%
-  dplyr::ungroup() %>%
-  dplyr::summarise(min_cells = round(mean(n) * 0.1)) %>%
-  pull(min_cells)
+  dplyr::group_by(surgery) %>%
+  dplyr::summarise(min_cells = round(mean(n) * 0.1))
 
-# we will filter the spatial context to include only those which are present in
-# at least three separate patients and contain more than the minimum cell threshold.
-lab_spe <- filterSpatialContext(
-  object = lab_spe,
+cell_threshold <- setNames(cell_threshold$min_cells, cell_threshold$surgery)
+
+min_sc_patients <- 3
+
+# we will filter the spatial context to include only those contexts which are
+# present in at least three separate patients and contain more than
+# the minimum cell threshold determined for each surgery type.
+prim_filt_sc <- filterSpatialContext(
+  object = lab_spe[, lab_spe$surgery == "Prim"],
   entry = "delaunay_sc",
   group_by = "patient",
-  group_threshold = 3,
-  cells_threshold = cell_threshold,
-  name = "delaunay_sc_filt"
+  group_threshold = min_sc_patients,
+  cells_threshold = cell_threshold[["Prim"]],
+  name = "prim_delaunay_sc_filt"
+)
+
+rec_filt_sc <- filterSpatialContext(
+  object = lab_spe[, lab_spe$surgery == "Rec"],
+  entry = "delaunay_sc",
+  group_by = "patient",
+  group_threshold = min_sc_patients,
+  cells_threshold = cell_threshold[["Rec"]],
+  name = "rec_delaunay_sc_filt"
 )
 
 order_unique_scs <- function(vec, index = FALSE) {
@@ -1149,19 +1162,35 @@ order_unique_scs <- function(vec, index = FALSE) {
   }
 }
 
-lab_spe$delaunay_sc_filt <- factor(
-  x = lab_spe$delaunay_sc_filt,
-  levels = order_unique_scs(lab_spe$delaunay_sc_filt)
+# lab_spe$delaunay_sc_filt <- factor(
+#     x = lab_spe$delaunay_sc_filt,
+#     levels = order_unique_scs(lab_spe$delaunay_sc_filt)
+# )
+#
+# col_sc <- setNames(
+# colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_sc_filt))),
+# levels(lab_spe$delaunay_sc_filt)
+# )
+
+prim_filt_sc$prim_delaunay_sc_filt <- factor(
+  x = prim_filt_sc$prim_delaunay_sc_filt,
+  levels = order_unique_scs(prim_filt_sc$prim_delaunay_sc_filt)
 )
 
-col_sc <- setNames(
-  colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_sc_filt))),
-  levels(lab_spe$delaunay_sc_filt)
+rec_filt_sc$rec_delaunay_sc_filt <- factor(
+  x = rec_filt_sc$rec_delaunay_sc_filt,
+  levels = order_unique_scs(rec_filt_sc$rec_delaunay_sc_filt)
 )
 
-col_cn <- setNames(
-  colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_cn_clusters))),
-  levels(lab_spe$delaunay_cn_clusters)
+sc_colors <- list(
+  prim = setNames(
+    colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(prim_filt_sc$prim_delaunay_sc_filt))),
+    levels(prim_filt_sc$prim_delaunay_sc_filt)
+  ),
+  rec = setNames(
+    colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(rec_filt_sc$rec_delaunay_sc_filt))),
+    levels(rec_filt_sc$rec_delaunay_sc_filt)
+  )
 )
 
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
@@ -1175,15 +1204,16 @@ plot_sc <- function(spe_obj,
                     spe_filt_col = "surgery",
                     node_label = "delaunay_sc_filt",
                     node_colours = col_sc,
+                    graph_node_size = "15",
                     image_id = "sample_id",
                     plot_title = "Filtered Spatial Contexts",
                     graph_method = "delaunay triangulation",
-                    min_patient_context = 3,
+                    min_patient_context = min_sc_patients,
                     min_cells = cell_threshold,
                     plot_subtitle = glue::glue(
                       "graph method: {graph_method}",
-                      "min context per patient: {min_patient_context}",
-                      "min cells per context: {min_cells}",
+                      "min. patients context detected in: {min_patient_context}",
+                      "min. cells per context: {min_cells}",
                       .sep = "\n"
                     ),
                     plot_caption = "*NA points did not meet the filtering criteria") {
@@ -1244,7 +1274,7 @@ plot_sc <- function(spe_obj,
     edge_color_fix = "grey75",
     node_label_color_by = "n_cells",
     node_color_by = "n_cells",
-    node_size_fix = "10",
+    node_size_fix = graph_node_size,
   ) +
     scale_color_viridis() +
     ggplot2::labs(
@@ -1272,10 +1302,28 @@ plot_sc <- function(spe_obj,
 }
 
 sc_plots <- list(
-  all = plot_sc(spe_obj = lab_spe),
-  primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]),
-  recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
+  primary = plot_sc(
+    spe_obj = prim_filt_sc,
+    spe_filt_col = "surgery",
+    node_label = "prim_delaunay_sc_filt",
+    node_colours = sc_colors$prim,
+    min_cells = cell_threshold[["Prim"]]
+  ),
+  recurrent = plot_sc(
+    spe_obj = rec_filt_sc,
+    spe_filt_col = "surgery",
+    node_label = "rec_delaunay_sc_filt",
+    node_colours = sc_colors$rec,
+    min_cells = cell_threshold[["Rec"]]
+  )
 )
+
+
+# sc_plots <- list(
+#   all = plot_sc(spe_obj = lab_spe),
+#   primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]),
+#   recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
+# )
 
 sc_plots <- list_flatten(sc_plots)
 
@@ -1291,8 +1339,8 @@ dev.off()
 
 pdf(
   file = nf("spatial_context_graphs.pdf", io$outputs$temp_sc),
-  width = 20,
-  height = 10,
+  width = 12,
+  height = 8,
   onefile = TRUE
 )
 print(sc_plots[grep("_graph$", names(sc_plots))])
