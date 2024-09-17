@@ -603,6 +603,11 @@ io$outputs$temp_cn <- nd(
   add_timestamp = FALSE
 )
 
+lab_spe@metadata$v2_colours$cn_colours <- setNames(
+  colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(lab_spe$delaunay_cn_clusters))),
+  levels(lab_spe$delaunay_cn_clusters)
+)
+
 plot_cn <- function(spe_obj,
                     node_label = "manual_gating",
                     patients = c("64", "67", "71", "82", "84"),
@@ -1162,6 +1167,7 @@ order_unique_scs <- function(vec, index = FALSE) {
   }
 }
 
+
 # lab_spe$delaunay_sc_filt <- factor(
 #     x = lab_spe$delaunay_sc_filt,
 #     levels = order_unique_scs(lab_spe$delaunay_sc_filt)
@@ -1184,11 +1190,11 @@ rec_filt_sc$rec_delaunay_sc_filt <- factor(
 
 sc_colors <- list(
   prim = setNames(
-    colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(prim_filt_sc$prim_delaunay_sc_filt))),
+    lab_spe@metadata$v2_colours$cn_colours[str_extract(levels(prim_filt_sc$prim_delaunay_sc_filt), "^\\d+")],
     levels(prim_filt_sc$prim_delaunay_sc_filt)
   ),
   rec = setNames(
-    colorRampPalette(RColorBrewer::brewer.pal(12, "Paired"))(length(levels(rec_filt_sc$rec_delaunay_sc_filt))),
+    lab_spe@metadata$v2_colours$cn_colours[str_extract(levels(rec_filt_sc$rec_delaunay_sc_filt), "^\\d+")],
     levels(rec_filt_sc$rec_delaunay_sc_filt)
   )
 )
@@ -1200,11 +1206,13 @@ io$outputs$temp_sc <- nd(
   add_timestamp = FALSE
 )
 
+update_geom_defaults("point", list(alpha = 0.75))
+
 plot_sc <- function(spe_obj,
                     spe_filt_col = "surgery",
                     node_label = "delaunay_sc_filt",
                     node_colours = col_sc,
-                    graph_node_size = "15",
+                    graph_node_size = "20",
                     image_id = "sample_id",
                     plot_title = "Filtered Spatial Contexts",
                     graph_method = "delaunay triangulation",
@@ -1269,30 +1277,30 @@ plot_sc <- function(spe_obj,
     )
 
   sc_graph_data <- plotSpatialContext(
-      object = spe_obj,
-      entry = node_label,
-      group_by = image_id, 
-      return_data = TRUE
+    object = spe_obj,
+    entry = node_label,
+    group_by = image_id,
+    return_data = TRUE
   )
-
+  
   sc_graph <- plotSpatialContext(
     object = spe_obj,
     entry = node_label,
     group_by = image_id,
     edge_color_fix = "grey75",
-    node_label_color_by = "n_cells",
-    node_color_by = "n_cells",
+    node_label_color_fix = "black",
+    node_color_by = "name",
     node_size_fix = graph_node_size,
   ) +
-    scale_color_viridis() +
+    scale_color_manual(values = node_colours) +
     ggplot2::labs(
       title = plot_title,
       subtitle = plot_subtitle
     ) +
     IMCfuncs::facetted_comp_bxp_theme(legend_key_size = 10) +
     theme(
-      legend.position = "right",
-      legend.title = element_text(size = 20, face = "bold"),
+      # legend.position = "right",
+      # legend.title = element_text(size = 20, face = "bold"),
       plot.title = element_text(hjust = 0),
       plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
       axis.ticks = element_blank(),
@@ -1309,8 +1317,6 @@ plot_sc <- function(spe_obj,
     )
   )
 }
-
-update_geom_defaults("point", list(alpha = 0.75))
 
 sc_plots <- list(
   primary = plot_sc(
@@ -1329,14 +1335,9 @@ sc_plots <- list(
   )
 )
 
-
-# sc_plots <- list(
-#   all = plot_sc(spe_obj = lab_spe),
-#   primary = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Prim"]),
-#   recurrent = plot_sc(spe_obj = lab_spe[, lab_spe$surgery == "Rec"])
-# )
-
 sc_plots <- list_flatten(sc_plots)
+sc_graphs <- sc_plots[grep("_data$", names(sc_plots))]
+sc_plots <- sc_plots[!grepl("_data$", names(sc_plots))]
 
 pdf(
   file = nf("spatial_context_locs.pdf", io$outputs$temp_sc),
@@ -1351,7 +1352,7 @@ dev.off()
 pdf(
   file = nf("spatial_context_graphs.pdf", io$outputs$temp_sc),
   width = 12,
-  height = 8,
+  height = 9,
   onefile = TRUE
 )
 print(sc_plots[grep("_graph$", names(sc_plots))])
