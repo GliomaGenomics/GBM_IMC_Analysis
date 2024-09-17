@@ -919,10 +919,11 @@ cn_enrich_params <- expand.grid(
       is.na(filter_col) & is.na(filter_val)
   )
 
-cn_enrichment <- purrr::pmap(cn_enrich_params, ~ {
+cn_enrichment <- list()
+    
+cn_enrichment$bubble <- purrr::pmap(cn_enrich_params, ~ {
   plot_cn_enrichment(
     spe_obj = lab_spe,
-    plot_type = "heatmap",
     filter_col = ..1,
     filter_val = ..2,
     cell_label = ..3,
@@ -931,13 +932,35 @@ cn_enrichment <- purrr::pmap(cn_enrich_params, ~ {
   )
 })
 
+cn_enrichment$heatmap <- purrr::pmap(cn_enrich_params, ~ {
+    plot_cn_enrichment(
+        spe_obj = lab_spe,
+        plot_type = "heatmap",
+        filter_col = ..1,
+        filter_val = ..2,
+        cell_label = ..3,
+        scale_on = "cn",
+        clip_min = 0.5
+    )
+})
+
 pdf(
-  file = nf("delaunay_cn_enrichment.pdf", io$outputs$temp_cn),
-  width = 10,
+    file = nf("delaunay_cn_enrichment_bubble.pdf", io$outputs$temp_cn),
+    width = 15,
+    height = 10,
+    onefile = TRUE
+)
+print(cn_enrichment$bubble)
+dev.off()
+
+
+pdf(
+  file = nf("delaunay_cn_enrichment_heatmap.pdf", io$outputs$temp_cn),
+  width = 15,
   height = 10,
   onefile = TRUE
 )
-print(cn_enrichment)
+print(cn_enrichment$heatmap)
 dev.off()
 
 
