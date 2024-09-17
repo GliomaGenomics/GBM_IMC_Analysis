@@ -920,7 +920,7 @@ cn_enrich_params <- expand.grid(
   )
 
 cn_enrichment <- list()
-    
+
 cn_enrichment$bubble <- purrr::pmap(cn_enrich_params, ~ {
   plot_cn_enrichment(
     spe_obj = lab_spe,
@@ -933,22 +933,22 @@ cn_enrichment$bubble <- purrr::pmap(cn_enrich_params, ~ {
 })
 
 cn_enrichment$heatmap <- purrr::pmap(cn_enrich_params, ~ {
-    plot_cn_enrichment(
-        spe_obj = lab_spe,
-        plot_type = "heatmap",
-        filter_col = ..1,
-        filter_val = ..2,
-        cell_label = ..3,
-        scale_on = "cn",
-        clip_min = 0.5
-    )
+  plot_cn_enrichment(
+    spe_obj = lab_spe,
+    plot_type = "heatmap",
+    filter_col = ..1,
+    filter_val = ..2,
+    cell_label = ..3,
+    scale_on = "cn",
+    clip_min = 0.5
+  )
 })
 
 pdf(
-    file = nf("delaunay_cn_enrichment_bubble.pdf", io$outputs$temp_cn),
-    width = 15,
-    height = 10,
-    onefile = TRUE
+  file = nf("delaunay_cn_enrichment_bubble.pdf", io$outputs$temp_cn),
+  width = 15,
+  height = 10,
+  onefile = TRUE
 )
 print(cn_enrichment$bubble)
 dev.off()
@@ -963,18 +963,15 @@ pdf(
 print(cn_enrichment$heatmap)
 dev.off()
 
+rm(cn_enrich_params, cn_enrichment)
 
 plot_cn_labels <- function(spe_obj,
-                           plot_group = "sample_id",
-                           cn_label = "delaunay_cn_clusters",
-                           anno = c("fine", "main")) {
-  if (!plot_group %in% names(colData(spe_obj))) {
-    stop("plot_group not found in colData(spe_obj)")
-  }
-
-  if (!cn_label %in% names(colData(spe_obj))) {
-    stop("cn_label not found in colData(spe_obj)")
-  }
+                           anno = c("fine", "main"),
+                           patient_col = "patient",
+                           surgery_col = "surgery",
+                           roi_col = "ROI",
+                           cn_label = "delaunay_cn_clusters") {
+  if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
 
   anno_info <- switch(
     EXPR = match.arg(anno, several.ok = FALSE),
@@ -999,28 +996,34 @@ plot_cn_labels <- function(spe_obj,
     .sep = "\n"
   )
 
-  filt_spe <- spe_obj[, !is.na(spe_obj[[anno_info$label]])]
+  filt_spe <- lab_spe[, !is.na(lab_spe[[anno_info$label]])]
 
   filt_spe <- as_tibble(spatialCoords(filt_spe)) %>%
     dplyr::rename(x = Pos_X, y = Pos_Y) %>%
     cbind(
-      id = filt_spe[[plot_group]],
+      patient = filt_spe[[patient_col]],
+      surgery = filt_spe[[surgery_col]],
+      roi = filt_spe[[roi_col]],
       cluster = filt_spe[[cn_label]],
       label = filt_spe[[anno_info$label]]
+    ) %>%
+    mutate(
+      across(surgery, ~ ifelse(. == "Prim", "Primary", "Recurrent"))
     )
 
   out <- filt_spe %>%
-    group_by(id) %>%
-    group_split(.keep = FALSE)
-  names(out) <- unique(filt_spe$id)
+    group_by(patient, surgery) %>%
+    group_split(.keep = TRUE)
 
-  out <- purrr::imap(out, ~ {
+  names(out) <- sapply(out, \(x) paste(unique(x$patient), unique(x$surgery), sep = "_"))
+
+  out <- purrr::map(out, ~ {
     .x %>%
       ggplot(aes(x = x, y = y, color = label)) +
       geom_point(size = 2, alpha = 0.75) +
       facet_wrap(~cluster, ncol = 3) +
       labs(
-        title = .y,
+        title = glue::glue("Cellular Neighborhoods - {unique(.x$patient)}{ unique(.x$surgery)}"),
         subtitle = data_info
       ) +
       scale_color_manual(values = anno_info$colors) +
@@ -1044,36 +1047,19 @@ pdf(
 )
 plot_cn_labels(
   spe_obj = lab_spe,
-  plot_group = "surgery",
-  cn_label = "delaunay_cn_clusters",
-  anno = "main"
-)
-plot_cn_labels(
-  spe_obj = lab_spe,
-  plot_group = "surgery",
-  cn_label = "delaunay_cn_exprs_clusters",
   anno = "main"
 )
 dev.off()
 
-
 pdf(
-  file = nf("knn_cn_surgery_main.pdf", io$outputs$temp_cn),
+  file = nf("delaunay_cn_surgery_fine.pdf", io$outputs$temp_cn),
   width = 20,
   height = 20,
   onefile = TRUE
 )
 plot_cn_labels(
   spe_obj = lab_spe,
-  plot_group = "surgery",
-  cn_label = "knn_cn_clusters",
-  anno = "main"
-)
-plot_cn_labels(
-  spe_obj = lab_spe,
-  plot_group = "surgery",
-  cn_label = "knn_cn_exprs_clusters",
-  anno = "main"
+  anno = "fine"
 )
 dev.off()
 
