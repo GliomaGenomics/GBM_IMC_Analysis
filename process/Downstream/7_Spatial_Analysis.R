@@ -707,8 +707,8 @@ dev.off()
 
 # VISUALISE CELLULAR NEIGHBORHOOD ENRICHMENT -----------------------------------
 plot_cn_enrichment <- function(spe_obj,
-                               filter_col = NULL,
-                               filter_val = NULL,
+                               filter_col = NA,
+                               filter_val = NA,
                                cell_label = "manual_gating",
                                cn_label = "delaunay_cn_clusters",
                                scale_on = c("cell", "cn", "none"),
@@ -719,8 +719,13 @@ plot_cn_enrichment <- function(spe_obj,
                                max_bubble_size = 16,
                                show_heatmap_text = TRUE,
                                rev_cells = FALSE,
-                               plot_title = "Cellular Neighborhood Enrichment",
-                               plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text, "*Tile text denotes ncells", ""),
+                               plot_title = "Cellular Neighborhood (CN) Enrichment",
+                               plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text,
+                                 "*Tile text denotes ncells",
+                                 ""
+                               ),
+                               x_axis_title = "\n\nCN (total cells per CN)",
+                               y_axis_title = "",
                                fill_lab = ifelse(scale_on == "none", "", "zscore")) {
   data_info <- list(
     samples = "samples: All",
@@ -733,11 +738,11 @@ plot_cn_enrichment <- function(spe_obj,
     )
   )
 
-  df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
+  if (!is.na(filter_col) & !is.na(filter_val)) {
+    if (length(filter_val) > 1) stop("only one filter_val can be used")
+    if (!filter_col %in% names(colData(spe_obj))) stop("filter_col not found in colData(spe_obj)")
 
-  if (!is.null(filter_col) & !is.null(filter_val)) {
-    if (length(filter_val) > 1) stop("only one filter_val can  be used")
-    if (!filter_col %in% colnames(df)) stop("filter_col not found in df")
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
     if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
 
     df <- df %>%
@@ -745,6 +750,8 @@ plot_cn_enrichment <- function(spe_obj,
 
     filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
     data_info$samples <- paste0(filter_col, ": ", filt_vals)
+  } else {
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
   }
 
   data_info <- glue::glue(
@@ -793,6 +800,11 @@ plot_cn_enrichment <- function(spe_obj,
   tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
 
   tab <- tab %>%
+    group_by(cn_label) %>%
+    summarise(cn_total = sum(text_lab, na.rm = TRUE), .groups = "keep") %>%
+    ungroup() %>%
+    dplyr::left_join(tab, ., by = "cn_label") %>%
+    dplyr::mutate(x_axis_lab = glue::glue("{cn_label}\n({cn_total})")) %>%
     dplyr::mutate(
       dplyr::across(
         dplyr::starts_with("text_"), ~ ifelse(is.na(value), NA, .)
@@ -835,11 +847,12 @@ plot_cn_enrichment <- function(spe_obj,
         title = plot_title,
         subtitle = data_info,
         caption = plot_caption,
-        x = "",
-        y = "",
+        x = x_axis_title,
+        y = y_axis_title,
         fill = fill_lab,
         size = "ncells"
       ) +
+      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
       outplot_theme +
       guides(
         size = guide_legend(
@@ -885,81 +898,38 @@ plot_cn_enrichment <- function(spe_obj,
         title = plot_title,
         subtitle = data_info,
         caption = plot_caption,
-        x = "",
-        y = "",
+        x = x_axis_title,
+        y = y_axis_title,
         fill = fill_lab
       ) +
+      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
       outplot_theme
   }
 }
 
+cn_enrich_params <- expand.grid(
+  filter_col = c(NA, "surgery"),
+  filter_val = c(NA, "Prim", "Rec"),
+  cell_label = c("main_anno_v2", "manual_gating"),
+  stringsAsFactors = FALSE
+) %>%
+  tibble() %>%
+  filter(
+    !is.na(filter_col) & !is.na(filter_val) |
+      is.na(filter_col) & is.na(filter_val)
+  )
 
-
-
-plot_cn_enrichment(
-  spe_obj = lab_spe,
-  filter_col = "surgery",
-  filter_val = "Prim",
-  cell_label = "main_anno_v2",
-  scale_on = "cn",
-  clip_min = 0.5
-)
-
-
-plot_cn_enrichment(
-  spe_obj = lab_spe,
-  filter_col = "surgery",
-  filter_val = "Prim",
-  cell_label = "manual_gating",
-  scale_on = "cn",
-  clip_min = 1
-)
-
-
-plot_cn_enrichment(
-  spe_obj = lab_spe,
-  plot_type = "bubble",
-  filter_col = "surgery",
-  filter_val = "Prim",
-  cell_label = "manual_gating",
-  scale_on = "cn",
-  clip_min = 0.5
-)
-
-
-
-
-cn_enrichment <- grep("clusters$", names(colData(lab_spe)), value = T) %>%
-  as.list() %>%
-  purrr::set_names(.) %>%
-  purrr::map(~ {
-    out <- list()
-
-    out$all <- cn_enrich_heatmap(
-      spe_obj = lab_spe,
-      cn_label = .x,
-      clip_min = 0,
-    )
-
-    out$primary <- cn_enrich_heatmap(
-      spe_obj = lab_spe,
-      filter_col = "surgery",
-      filter_val = "Prim",
-      cn_label = .x,
-      clip_min = 0
-    )
-
-    out$recurrent <- cn_enrich_heatmap(
-      spe_obj = lab_spe,
-      filter_col = "surgery",
-      filter_val = "Rec",
-      cn_label = .x,
-      clip_min = 0
-    )
-    return(out)
-  }) %>%
-  purrr::list_flatten()
-
+cn_enrichment <- purrr::pmap(cn_enrich_params, ~ {
+  plot_cn_enrichment(
+    spe_obj = lab_spe,
+    plot_type = "heatmap",
+    filter_col = ..1,
+    filter_val = ..2,
+    cell_label = ..3,
+    scale_on = "cn",
+    clip_min = 0.5
+  )
+})
 
 pdf(
   file = nf("delaunay_cn_enrichment.pdf", io$outputs$temp_cn),
@@ -967,16 +937,7 @@ pdf(
   height = 10,
   onefile = TRUE
 )
-print(cn_enrichment[grep("^delaunay_", names(cn_enrichment))])
-dev.off()
-
-pdf(
-  file = nf("knn_cn_enrichment.pdf", io$outputs$temp_cn),
-  width = 10,
-  height = 10,
-  onefile = TRUE
-)
-print(cn_enrichment[grep("^knn_", names(cn_enrichment))])
+print(cn_enrichment)
 dev.off()
 
 
