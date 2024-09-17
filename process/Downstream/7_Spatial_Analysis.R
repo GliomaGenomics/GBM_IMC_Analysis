@@ -1244,8 +1244,10 @@ plot_sc <- function(spe_obj,
   spatial_locs <- imcRtools::plotSpatial(
     object = spe_obj,
     node_color_by = node_label,
+    node_size_fix = 2,
     img_id = image_id,
-    ncols = 3
+    ncols = 3,
+    flip_y = FALSE
   ) +
     ggplot2::labs(
       title = plot_title,
@@ -1266,6 +1268,12 @@ plot_sc <- function(spe_obj,
       )
     )
 
+  sc_graph_data <- plotSpatialContext(
+      object = spe_obj,
+      entry = node_label,
+      group_by = image_id, 
+      return_data = TRUE
+  )
 
   sc_graph <- plotSpatialContext(
     object = spe_obj,
@@ -1295,11 +1303,14 @@ plot_sc <- function(spe_obj,
 
   return(
     list(
+      sc_data = sc_graph_data,
       locs = spatial_locs,
       graph = sc_graph
     )
   )
 }
+
+update_geom_defaults("point", list(alpha = 0.75))
 
 sc_plots <- list(
   primary = plot_sc(
