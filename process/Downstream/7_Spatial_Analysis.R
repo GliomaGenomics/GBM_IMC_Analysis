@@ -1429,7 +1429,6 @@ print(sc_plots)
 dev.off()
 
 rm(sc_plots, sc_graphs)
-
 # CELL INTERACTION ANALYSIS ----------------------------------------------------
 # The cell interaction analysis method we will use was first described in:
 #
@@ -1451,79 +1450,104 @@ io$outputs$temp_ia <- nd(
 
 library(scales)
 
-interactions_classic <- testInteractions(
+interactions_histocat <- testInteractions(
   object = lab_spe,
-  group_by = "sample_id",
+  group_by = "patient_surgery",
   label = "manual_gating",
   colPairName = "delaunay_50",
-  method = "classic",
+  method = "histocat",
   iter = 1000,
   p_threshold = 0.01,
   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
 )
 
-interactions_patch <- testInteractions(
-  object = lab_spe,
-  group_by = "sample_id",
-  label = "manual_gating",
-  colPairName = "delaunay_50",
-  method = "patch",
-  patch_size = 5,
-  iter = 1000,
-  p_threshold = 0.01,
-  BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
-)
-
-interaction_data <- bind_rows(
-  {
-    interactions_classic %>%
-      as_tibble() %>%
-      mutate(count_method = "classic")
-  },
-  {
-    interactions_patch %>%
-      as_tibble() %>%
-      mutate(count_method = "patch")
-  }
-)
-
-interaction_data <- colData(lab_spe)[, c(
-  "sample_id", "patient", "surgery",
-  "region_type", "region_type_new"
-)] %>%
+interactions_histocat_df <- interactions_histocat %>%
   as_tibble() %>%
-  dplyr::distinct() %>%
-  dplyr::rename("group_by" = sample_id) %>%
-  dplyr::left_join(x = interaction_data, by = "group_by")
+  mutate(
+    count_method = "histocat",
+    surgery = str_extract(group_by, "(?i)(prim|rec)$")
+  )
 
+saveRDS(interactions_histocat_df, nf("histocat_cell_interactions.rds", io$outputs$temp_ia))
 
-saveRDS(interaction_data, nf("cell_interaction_data.rds", io$outputs$temp_ia))
+rm(interactions_histocat)
 
-rm(interactions_classic, interactions_patch)
+# interactions_classic <- testInteractions(
+#   object = lab_spe,
+#   group_by = "sample_id",
+#   label = "manual_gating",
+#   colPairName = "delaunay_50",
+#   method = "classic",
+#   iter = 1000,
+#   p_threshold = 0.01,
+#   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+# )
+# 
+# interactions_patch <- testInteractions(
+#   object = lab_spe,
+#   group_by = "sample_id",
+#   label = "manual_gating",
+#   colPairName = "delaunay_50",
+#   method = "patch",
+#   patch_size = 5,
+#   iter = 1000,
+#   p_threshold = 0.01,
+#   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+# )
+# 
+# interaction_data <- bind_rows(
+#   {
+#     interactions_classic %>%
+#       as_tibble() %>%
+#       mutate(count_method = "classic")
+#   },
+#   {
+#     interactions_patch %>%
+#       as_tibble() %>%
+#       mutate(count_method = "patch")
+#   }
+# )
+# 
+# interaction_data <- colData(lab_spe)[, c(
+#   "sample_id", "patient", "surgery",
+#   "region_type", "region_type_new"
+# )] %>%
+#   as_tibble() %>%
+#   dplyr::distinct() %>%
+#   dplyr::rename("group_by" = sample_id) %>%
+#   dplyr::left_join(x = interaction_data, by = "group_by")
+# 
+# 
+# saveRDS(interaction_data, nf("cell_interaction_data.rds", io$outputs$temp_ia))
+
+# rm(interactions_classic, interactions_patch)
 
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
 source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
 
-plot_params <- tibble(
-  filter_by = c("none", "surgery", "surgery"),
-  filter_val = c(NA, "Prim", "Rec"),
-  count_method = c("patch")
-)
-
-plot_params <- plot_params %>%
-  mutate(count_method = "classic") %>%
-  bind_rows(plot_params)
-
-ia_plots <- pmap(plot_params, clean_ia_data, ia_df = interaction_data)
-ia_plots <- map(ia_plots, plot_ia)
-
 pdf(
-  file = nf("cell_interactions.pdf", io$outputs$temp_ia),
-  width = 15,
-  height = 15,
-  onefile = TRUE
+    file = nf("cell_interactions.pdf", io$outputs$temp_ia),
+    width = 12,
+    height = 12,
+    onefile = TRUE
 )
-print(ia_plots)
+clean_ia_data(
+    ia_df = interactions_histocat_df,
+    filter_by = "surgery",
+    filter_val = "Prim",
+    min_patients = 3
+) %>%
+    plot_ia(ia_clean_df = .)
+
+
+clean_ia_data(
+    ia_df = interactions_histocat_df,
+    filter_by = "surgery",
+    filter_val = "Rec",
+    min_patients = 3
+) %>%
+    plot_ia(ia_clean_df = .)
+
 dev.off()
 
 # SAVE DATA --------------------------------------------------------------------
