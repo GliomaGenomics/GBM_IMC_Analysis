@@ -1282,7 +1282,7 @@ plot_sc <- function(spe_obj,
     group_by = image_id,
     return_data = TRUE
   )
-  
+
   sc_graph <- plotSpatialContext(
     object = spe_obj,
     entry = node_label,
@@ -1337,6 +1337,8 @@ sc_plots <- list(
 
 sc_plots <- list_flatten(sc_plots)
 sc_graphs <- sc_plots[grep("_data$", names(sc_plots))]
+names(sc_graphs) <- str_extract(names(sc_graphs), "(?i)^[a-z]+")
+
 sc_plots <- sc_plots[!grepl("_data$", names(sc_plots))]
 
 pdf(
@@ -1357,6 +1359,76 @@ pdf(
 )
 print(sc_plots[grep("_graph$", names(sc_plots))])
 dev.off()
+
+plot_sc_graph_measures <- function(graph_list, point_colors, title_prefix = "") {
+  v <- graph_list$vertices
+
+  g <- igraph::graph_from_data_frame(
+    d = graph_list$edges,
+    vertices = graph_list$vertices,
+    directed = TRUE
+  )
+
+  # Calculate various centrality measures
+  v$degree_centrality <- igraph::degree(g, mode = "all")
+  v$closeness_centrality <- igraph::closeness(g, mode = "all", )
+  v$betweenness_centrality <- igraph::betweenness(g, directed = TRUE)
+
+  plot_data <- v %>%
+    select(
+      sc = 1,
+      n_cells = n_cells,
+      n_regions = n_group,
+      degree_centrality,
+      closeness_centrality,
+      betweenness_centrality
+    ) %>%
+    tidyr::pivot_longer(
+      cols = -sc,
+      names_to = "measure",
+      values_to = "value"
+    ) %>%
+    mutate(
+      measure = factor(measure, levels = c("n_cells", "n_regions", "degree_centrality", "closeness_centrality", "betweenness_centrality"))
+    )
+
+  ggplot(plot_data, aes(x = value, y = sc, fill = sc)) +
+    geom_point(size = 8, shape = 21, color = "black") +
+    facet_wrap(~measure, scales = "free_x", ncol = 1) +
+    scale_fill_manual(values = point_colors) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    labs(
+      title = glue::glue("{title_prefix} Spatial Context Measures"),
+      x = "",
+      y = ""
+    ) +
+    theme(legend.position = "none")
+}
+
+sc_plots <- imap(sc_graphs, ~ {
+  colour_to_plot <- switch(
+    EXPR = match.arg(.y, several.ok = FALSE),
+    "primary" = sc_colors$prim,
+    "recurrent" = sc_colors$rec
+  )
+
+  plot_sc_graph_measures(
+    graph_list = .x,
+    point_colors = colour_to_plot,
+    title_prefix = tools::toTitleCase(.y)
+  )
+})
+
+pdf(
+  file = nf("spatial_context_measures.pdf", io$outputs$temp_sc),
+  width = 10,
+  height = 45,
+  onefile = TRUE
+)
+print(sc_plots)
+dev.off()
+
+rm(sc_plots, sc_graphs)
 
 # CELL INTERACTION ANALYSIS ----------------------------------------------------
 # The cell interaction analysis method we will use was first described in:
