@@ -726,191 +726,209 @@ plot_cn_enrichment <- function(spe_obj,
                                rev_cells = FALSE,
                                plot_title = "Cellular Neighborhood (CN) Enrichment",
                                plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text,
-                                 "*Tile text denotes ncells",
-                                 ""
+                                                     "*Tile text denotes ncells",
+                                                     ""
                                ),
                                x_axis_title = "\n\nCN (total cells per CN)",
                                y_axis_title = "",
                                fill_lab = ifelse(scale_on == "none", "", "zscore")) {
-  data_info <- list(
-    samples = "samples: All",
-    graph = str_split_i(cn_label, "_", 1),
-    neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
-    scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
-      "cell" = "cell types",
-      "cn" = "neighborhoods",
-      "none" = "none"
-    )
-  )
-
-  if (!is.na(filter_col) & !is.na(filter_val)) {
-    if (length(filter_val) > 1) stop("only one filter_val can be used")
-    if (!filter_col %in% names(colData(spe_obj))) stop("filter_col not found in colData(spe_obj)")
-
-    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
-    if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
-
-    df <- df %>%
-      dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
-
-    filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
-    data_info$samples <- paste0(filter_col, ": ", filt_vals)
-  } else {
-    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
-  }
-
-  data_info <- glue::glue(
-    "{data_info$samples}",
-    "graph: {data_info$graph}",
-    "neighbour measure: {data_info$neighbor_measure}",
-    "exprs scaled across: {data_info$scale_on_label}",
-    "minimum zscore: {clip_min}",
-    .null = "n/a",
-    .sep = "\n"
-  )
-
-  lab_df <- table(df[, cn_label], df[, cell_label]) %>%
-    as.data.frame() %>%
-    dplyr::rename(text_lab = Freq)
-
-  tab <- switch(
-    EXPR = match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
-    "cell" = scale(table(df[, cn_label], df[, cell_label])),
-    "cn" = t(scale(table(df[, cell_label], df[, cn_label]))),
-    "none" = table(df[, cn_label], df[, cell_label])
-  )
-
-  tab <- as.data.frame(tab) %>%
-    dplyr::left_join(lab_df, by = c("Var1", "Var2")) %>%
-    dplyr::rename(
-      cn_label = Var1,
-      cell_label = Var2,
-      value = Freq
-    )
-
-  if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
-
-  if (!is.null(clip_min)) {
-    tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
-    scale_min_val <- clip_min
-  } else {
-    scale_min_val <- floor(min(tab$value, na.rm = TRUE)) * 2 / 2
-  }
-
-  scale_max_val <- ceiling(max(tab$value, na.rm = TRUE) * 2) / 2
-  scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
-
-
-  tab$fill_color <- fill_pal[as.numeric(cut(tab$value, breaks = length(fill_pal)))]
-  tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
-
-  tab <- tab %>%
-    group_by(cn_label) %>%
-    summarise(cn_total = sum(text_lab, na.rm = TRUE), .groups = "keep") %>%
-    ungroup() %>%
-    dplyr::left_join(tab, ., by = "cn_label") %>%
-    dplyr::mutate(x_axis_lab = glue::glue("{cn_label}\n({cn_total})")) %>%
-    dplyr::mutate(
-      dplyr::across(
-        dplyr::starts_with("text_"), ~ ifelse(is.na(value), NA, .)
-      )
-    )
-
-  outplot_theme <- ggplot2::theme_minimal(base_size = 16) +
-    theme(
-      panel.grid.major = element_blank(),
-      axis.text.x = element_text(size = 16, face = "bold"),
-      axis.text.y = element_text(size = 16, face = "bold"),
-      plot.title = element_text(size = 20, face = "bold"),
-      plot.subtitle = element_text(size = 16, face = "italic"),
-      plot.caption = element_text(size = 12, face = "italic")
-    )
-
-  if (match.arg(plot_type, several.ok = FALSE) == "bubble") {
-    tab %>%
-      ggplot(aes(x = cn_label, y = cell_label)) +
-      geom_tile(fill = "#fffdfa", colour = "grey50", linewidth = 0.1, linetype = 2) +
-      geom_point(
-        aes(size = text_lab, fill = value),
-        shape = 21, colour = "black", stroke = 0.75, na.rm = TRUE
-      ) +
-      ggplot2::scale_size(range = c(min_bubble_size, max_bubble_size)) +
-      ggplot2::scale_fill_gradientn(
-        breaks = scale_breaks,
-        limits = c(scale_min_val, scale_max_val),
-        colours = fill_pal,
-        guide = guide_colourbar(
-          barwidth = 2,
-          barheight = 15,
-          frame.colour = "black",
-          ticks.colour = "black",
-          ticks.linewidth = 0.35,
-          frame.linewidth = 0.35
+    data_info <- list(
+        samples = "samples: All",
+        graph = str_split_i(cn_label, "_", 1),
+        neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
+        scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+                                "cell" = "cell types",
+                                "cn" = "neighborhoods",
+                                "none" = "none"
         )
-      ) +
-      labs(
-        title = plot_title,
-        subtitle = data_info,
-        caption = plot_caption,
-        x = x_axis_title,
-        y = y_axis_title,
-        fill = fill_lab,
-        size = "ncells"
-      ) +
-      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
-      outplot_theme +
-      guides(
-        size = guide_legend(
-          order = 1,
-          override.aes = list(fill = "black")
+    )
+    
+    if (!is.na(filter_col) & !is.na(filter_val)) {
+        if (length(filter_val) > 1) stop("only one filter_val can be used")
+        if (!filter_col %in% names(colData(spe_obj))) stop("filter_col not found in colData(spe_obj)")
+        
+        df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
+        if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
+        
+        df <- df %>%
+            dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
+        
+        filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
+        data_info$samples <- paste0(filter_col, ": ", filt_vals)
+    } else {
+        df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+    }
+    
+    data_info <- glue::glue(
+        "{data_info$samples}",
+        "graph: {data_info$graph}",
+        "neighbour measure: {data_info$neighbor_measure}",
+        "exprs scaled across: {data_info$scale_on_label}",
+        "minimum zscore: {clip_min}",
+        .null = "n/a",
+        .sep = "\n"
+    )
+    
+    lab_df <- table(df[, cn_label], df[, cell_label]) %>%
+        as.data.frame() %>%
+        dplyr::rename(text_lab = Freq)
+    
+    tab <- switch(
+        EXPR = match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+        "cell" = scale(table(df[, cn_label], df[, cell_label])),
+        "cn" = t(scale(table(df[, cell_label], df[, cn_label]))),
+        "none" = table(df[, cn_label], df[, cell_label])
+    )
+    
+    tab <- as.data.frame(tab) %>%
+        dplyr::left_join(lab_df, by = c("Var1", "Var2")) %>%
+        dplyr::rename(
+            cn_label = Var1,
+            cell_label = Var2,
+            value = Freq
         )
-      )
-  } else {
-    tab %>%
-      ggplot(aes(x = cn_label, y = cell_label)) +
-      geom_tile(
-        aes(fill = value),
-        colour = "grey50", linewidth = 0.1, linetype = 2,
-        na.rm = TRUE
-      ) +
-      {
-        if (show_heatmap_text) {
-          geom_text(
-            aes(label = text_lab, colour = text_color),
-            size = 4,
-            fontface = "bold",
-            na.rm = TRUE,
-            show.legend = FALSE
-          )
-        }
-      } +
-      ggplot2::scale_fill_gradientn(
-        colours = fill_pal,
-        breaks = scale_breaks,
-        limits = c(scale_min_val, scale_max_val),
-        na.value = "white",
-        guide = guide_colourbar(
-          barwidth = 2,
-          barheight = 15,
-          frame.colour = "black",
-          ticks.colour = "black",
-          ticks.linewidth = 0.35,
-          frame.linewidth = 0.35
+    
+    if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
+    
+    if (!is.null(clip_min)) {
+        tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
+        scale_min_val <- clip_min
+    } else {
+        scale_min_val <- floor(min(tab$value, na.rm = TRUE)) * 2 / 2
+    }
+    
+    scale_max_val <- ceiling(max(tab$value, na.rm = TRUE) * 2) / 2
+    scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
+    
+    
+    tab$fill_color <- fill_pal[as.numeric(cut(tab$value, breaks = length(fill_pal)))]
+    tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
+    
+    tab <- tab %>%
+        group_by(cn_label) %>%
+        summarise(cn_total = sum(text_lab, na.rm = TRUE), .groups = "keep") %>%
+        ungroup() %>%
+        dplyr::left_join(tab, ., by = "cn_label") %>%
+        dplyr::mutate(
+            x_axis_lab = glue::glue("{cn_label}\n({cn_total})"),
+            text_lab_percent = round(text_lab / cn_total * 100)
+        ) %>%
+        dplyr::mutate(
+            dplyr::across(
+                dplyr::starts_with("text_"), ~ ifelse(is.na(value), NA, .)
+            )
         )
-      ) +
-      ggplot2::scale_color_identity() +
-      labs(
-        title = plot_title,
-        subtitle = data_info,
-        caption = plot_caption,
-        x = x_axis_title,
-        y = y_axis_title,
-        fill = fill_lab
-      ) +
-      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
-      outplot_theme
-  }
+    
+    outplot_theme <- ggplot2::theme_minimal(base_size = 16) +
+        theme(
+            panel.grid.major = element_blank(),
+            axis.text.x = element_text(size = 16, face = "bold"),
+            axis.text.y = element_text(size = 16, face = "bold"),
+            plot.title = element_text(size = 20, face = "bold"),
+            plot.subtitle = element_text(size = 16, face = "italic"),
+            plot.caption = element_text(size = 12, face = "italic")
+        )
+    
+    if (match.arg(plot_type, several.ok = FALSE) == "bubble") {
+        tab %>%
+            ggplot(aes(x = cn_label, y = cell_label)) +
+            geom_tile(fill = "#fffdfa", colour = "grey50", linewidth = 0.1, linetype = 2) +
+            geom_point(
+                aes(size = text_lab_percent, fill = value),
+                shape = 21, colour = "black", stroke = 0.75, na.rm = TRUE
+            ) +
+            ggplot2::scale_size(
+                range = c(min_bubble_size, max_bubble_size),
+                breaks = seq(0, 100, 20)
+            ) +
+            ggplot2::scale_fill_gradientn(
+                breaks = scale_breaks,
+                limits = c(scale_min_val, scale_max_val),
+                colours = fill_pal,
+                guide = guide_colourbar(
+                    barwidth = 2,
+                    barheight = 15,
+                    frame.colour = "black",
+                    ticks.colour = "black",
+                    ticks.linewidth = 0.35,
+                    frame.linewidth = 0.35
+                )
+            ) +
+            labs(
+                title = plot_title,
+                subtitle = data_info,
+                caption = plot_caption,
+                x = x_axis_title,
+                y = y_axis_title,
+                fill = fill_lab,
+                size = "% cells in CN"
+            ) +
+            scale_x_discrete(labels = unique(tab$x_axis_lab)) +
+            outplot_theme +
+            guides(
+                size = guide_legend(
+                    order = 1,
+                    override.aes = list(fill = "black")
+                )
+            )
+    } else {
+        tab <- tab %>%
+            mutate(
+                across(
+                    text_lab,
+                    ~ ifelse(!is.na(.),
+                             glue::glue("{text_lab}", "({text_lab_percent}%)", .na = "", .sep = "\n"),
+                             .
+                    )
+                )
+            )
+        
+        tab %>%
+            ggplot(aes(x = cn_label, y = cell_label)) +
+            geom_tile(
+                aes(fill = value),
+                colour = "grey50", linewidth = 0.1, linetype = 2,
+                na.rm = TRUE
+            ) +
+            {
+                if (show_heatmap_text) {
+                    geom_text(
+                        aes(label = text_lab, colour = text_color),
+                        size = 4,
+                        fontface = "bold",
+                        na.rm = TRUE,
+                        show.legend = FALSE
+                    )
+                }
+            } +
+            ggplot2::scale_fill_gradientn(
+                colours = fill_pal,
+                breaks = scale_breaks,
+                limits = c(scale_min_val, scale_max_val),
+                na.value = "white",
+                guide = guide_colourbar(
+                    barwidth = 2,
+                    barheight = 15,
+                    frame.colour = "black",
+                    ticks.colour = "black",
+                    ticks.linewidth = 0.35,
+                    frame.linewidth = 0.35
+                )
+            ) +
+            ggplot2::scale_color_identity() +
+            labs(
+                title = plot_title,
+                subtitle = data_info,
+                caption = plot_caption,
+                x = x_axis_title,
+                y = y_axis_title,
+                fill = fill_lab
+            ) +
+            scale_x_discrete(labels = unique(tab$x_axis_lab)) +
+            outplot_theme
+    }
 }
+
 
 cn_enrich_params <- expand.grid(
   filter_col = c(NA, "surgery"),
@@ -923,6 +941,8 @@ cn_enrich_params <- expand.grid(
     !is.na(filter_col) & !is.na(filter_val) |
       is.na(filter_col) & is.na(filter_val)
   )
+
+update_geom_defaults("point", list(alpha = 1))
 
 cn_enrichment <- list()
 
