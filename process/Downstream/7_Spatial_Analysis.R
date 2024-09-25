@@ -96,9 +96,6 @@ lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)
 # ) %>%
 #   readRDS()
 
-
-# regions <- readRDS(io$inputs$prevelance_out)
-
 # LABELLED CELL COUNTS ---------------------------------------------------------
 pdf(
   file = nf("labelled_cell_counts.pdf", io$outputs$temp_out),
@@ -148,6 +145,165 @@ lab_spe@colData[c("sample_id", "manual_gating")] %>%
   theme_classic()
 
 dev.off()
+
+# SCORE CELL STATES ------------------------------------------------------------
+state_markers <- list(
+    proliferative = c(
+        spe@metadata$markers$cell_states$Proliferating,
+        spe@metadata$markers$cell_states$Proliferating_stem_cell
+    ),
+    hypoxia = spe@metadata$markers$cell_states$Hypoxia,
+    queiescence = spe@metadata$markers$cell_states$Quiescent_stem_cell,
+    EMT = spe@metadata$markers$cell_states$Epithelial_mesenchymal_transition
+)
+
+classify_cell_states <- function(marker_list, 
+                                 expression_matrix, 
+                                 high_threshold = 2, low_threshold = -2) {
+    
+    # Ensure expression_matrix has row names
+    if (is.null(rownames(expression_matrix))) {
+        stop("The expression_matrix must have row names corresponding to marker genes.")
+    }
+    
+    # Ensure marker_list is a named list
+    if (is.null(names(marker_list)) || any(names(marker_list) == "")) {
+        stop("marker_list must be a named list with cell state names.")
+    }
+    
+
+    cell_ids <- colnames(expression_matrix)
+    if (is.null(cell_ids)) {
+        stop("The expression_matrix must have column names corresponding to cell IDs.")
+    }
+    
+    state_scores <- data.frame(cell = cell_ids, stringsAsFactors = FALSE)
+    
+    for (state in names(marker_list)) {
+        markers <- marker_list[[state]]
+
+        missing_markers <- setdiff(markers, rownames(expression_matrix))
+        if (length(missing_markers) > 0) {
+            warning(paste("Markers not found for state", state, ":", 
+                          paste(missing_markers, collapse = ", ")))
+            markers <- setdiff(markers, missing_markers)
+
+            if (length(markers) == 0) {
+                warning(paste("No valid markers left for state", state, 
+                              ". Skipping this state."))
+                next
+            }
+        }
+        
+        # Extract the expression data for the markers
+        marker_expr <- expression_matrix[markers, , drop = FALSE]
+        
+        # Sum the z-scores if multiple markers, else take the z-score directly
+        if (length(markers) > 1) {
+            # Sum the z-scores across markers for each cell
+            state_sum <- colSums(marker_expr, na.rm = TRUE)
+        } else {
+            # Single marker: take the z-score directly
+            state_sum <- as.numeric(marker_expr)
+            names(state_sum) <- colnames(marker_expr)
+        }
+        
+        # Classify cells as High or Low based on thresholds
+        high_class <- state_sum > high_threshold
+        low_class <- state_sum < low_threshold
+        
+        # Add classification to the state_scores dataframe
+        state_scores[[paste0(state, "_high")]] <- high_class
+        state_scores[[paste0(state, "_low")]] <- low_class
+    }
+    
+    return(state_scores)
+}
+
+summarize_states <- function(state_scores, marker_list) {
+    for (state in names(marker_list)) {
+        high_col <- paste0(state, "_high")
+        low_col <- paste0(state, "_low")
+        
+        # Check if the columns exist (in case some states were skipped due to missing markers)
+        if (!(high_col %in% colnames(state_scores)) || !(low_col %in% colnames(state_scores))) {
+            next
+        }
+        
+        high_count <- sum(state_scores[[high_col]], na.rm = TRUE)
+        low_count <- sum(state_scores[[low_col]], na.rm = TRUE)
+        
+        cat(sprintf("State: %s\n", state))
+        cat(sprintf("  High: %d cells\n", high_count))
+        cat(sprintf("  Low: %d cells\n\n", low_count))
+    }
+}
+
+
+plot_state_distribution <- function(expression_matrix = t(assay(spe, "zscore")),
+                                    state_name,
+                                    state_markers,
+                                    high_threshold = 1.2,
+                                    low_threshold = -1.2) {
+    
+    histogram_df <- expression_matrix[, state_markers, drop = FALSE] %>%
+        as.data.frame()
+    
+    if (ncol(histogram_df) > 1) {
+        histogram_df <- histogram_df %>%
+            mutate(state_zscore = rowSums(across(everything()))) %>%
+            select(state_zscore)
+    } else {
+        histogram_df <- histogram_df %>%
+            dplyr::rename(state_zscore = 1)
+    }
+    
+    
+    histogram_df %>%
+        ggplot(aes(x = state_zscore)) +
+        geom_histogram(binwidth = 0.5, fill = "lightblue", color = "black") +
+        geom_vline(xintercept = c(-1.2), linetype = "dashed", linewidth = 1, color = "darkred") +
+        geom_vline(xintercept = c(1.2), linetype = "dashed", linewidth = 1, color = "darkblue") +
+        labs(
+            title = glue::glue("{tools::toTitleCase(state_name)} Score Distribution"),
+            subtitle = glue::glue("low threshold (-1.2); high threshold (1.2)"),
+            x = "z-score",
+            y = "Number of cells"
+        ) +
+        scale_x_continuous(limits = c(-5, 5)) +
+        theme_minimal(base_size = 20) +
+        theme(
+            plot.title = element_text(face = "bold"),
+            plot.subtitle = element_text(face = "italic")
+        )
+}
+
+state_scores <- classify_cell_states(
+    marker_list = state_markers, 
+    expression_matrix = assay(spe, "zscore"),
+    high_threshold = 1.2,
+    low_threshold = -1.2
+)
+
+state_histograms =  purrr::imap(state_markers, 
+                                ~plot_state_distribution(state_name = .y, state_markers = .x)
+                                )
+
+pdf(file = nf("cell_state_score_histograms.pdf", io$outputs$temp_out),
+    width = 10,
+    height = 10,
+    onefile = TRUE
+)
+print(state_histograms)
+dev.off()
+
+summarize_states(state_scores = state_scores, marker_list = state_markers)
+
+saveRDS(state_scores, file = nf("cell_state_scores.rds", io$outputs$temp_out))
+
+rm(state_histograms, state_markers, 
+   classify_cell_states, plot_state_distribution, summarize_states
+   )
 
 # LABELLED CELL SPATIAL COORDINATES --------------------------------------------
 plot_cells <- function(spe_obj,
