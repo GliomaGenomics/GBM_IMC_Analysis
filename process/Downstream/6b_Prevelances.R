@@ -41,15 +41,43 @@ ndirs(io$outputs)
 io$outputs$temp_out <- nd(path = io$outputs$out_dir)
 
 # obtain the most-recent data from a time-stamped directory
-io$inputs$data <- list.files(io$inputs$input_dir, pattern = "^[T0-9-]+$")
-io$inputs$data <- io$inputs$data[order(io$inputs$input_dir, decreasing = TRUE)][[1]]
+find_file <- function(dir_path,
+                      file_pattern,
+                      dir_pattern = "^[T0-9-]+$",
+                      dir_select = c("recent", "oldest")) {
+  if (missing(dir_path)) stop("No directory path provided")
+  if (missing(file_pattern)) stop("No file pattern provided")
 
-io$inputs$data <- list.files(
-  path = file.path(io$inputs$input_dir, io$inputs$data),
-  pattern = "(?i)^spe_downstream",
-  full.names = TRUE
-)
+  dirs_found <- list.files(dir_path, pattern = dir_pattern)
 
+  if (length(dirs_found) == 0) stop("No directories found")
+
+  dir_selected <- switch(match.arg(dir_select, several.ok = FALSE),
+    recent = dirs_found[order(dirs_found, decreasing = TRUE)][[1]],
+    oldest = dirs_found[order(dirs_found, decreasing = FALSE)][[1]]
+  )
+
+  file_found <- list.files(
+    path = file.path(dir_path, dir_selected),
+    pattern = file_pattern,
+    ignore.case = TRUE,
+    recursive = FALSE,
+    full.names = TRUE
+  )
+
+  if (length(file_found) == 0) {
+    stop("No files found")
+  } else if (length(file_found) > 1) {
+    stop("Multiple files found")
+  } else {
+    return(file_found)
+  }
+}
+
+io$inputs$data <- find_file(io$inputs$input_dir, file_pattern = "spe_downstream")
+io$inputs$latest_prev_res <- find_file(io$outputs$out_dir, file_pattern = "prevelance_data")
+
+rm(find_file)
 # LOAD DATA  -------------------------------------------------------------------
 spe <- readRDS(io$inputs$data)
 
@@ -290,7 +318,6 @@ regions_labels %>%
 dev.off()
 
 
-
 regions <- regions_labels %>%
   group_by(sample_id) %>%
   summarise(
@@ -519,7 +546,66 @@ pdf(
 prop_plots
 dev.off()
 
-rm(prop_comps, prop_plots, labelled_props)
+
+# This plot is an updated version of the region label plot without the cell
+# state thresholds and with labelled cell proportions across the main cell
+# type annotations for each ROI:
+prev_region_labs <- readRDS(io$inputs$latest_prev_res)
+current_spe <- readRDS("outputs/spatial_analysis/2024-09-05T12-01-52/lab_spe_2024-09-12T18-16-25.rds")
+
+# Add colour info for facets based on the region labels
+prev_region_labs$facet_background <- plot_colours$patient[str_extract(prev_region_labs$sample_id, "^\\d{2}")]
+prev_region_labs$facet_text <- IMCfuncs::get_text_color(prev_region_labs$facet_background)
+
+region_main_anno_plot <- prev_region_labs %>%
+  tidyr::unnest_longer(col = main_anno, values_to = "count") %>%
+  tidyr::unnest_wider(count) %>%
+  ggplot(aes(x = label, y = prop, fill = label, group = sample_id)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggh4x::facet_wrap2(
+    facets = " sample_id",
+    ncol = 3,
+    strip = ggh4x::strip_themed(
+      background_x = lapply(
+        split(prev_region_labs, prev_region_labs$sample_id), \(x) {
+          element_rect(fill = unique(x[["facet_background"]]))
+        }
+      ),
+      text_x = lapply(
+        split(prev_region_labs, prev_region_labs$sample_id), \(x) {
+          element_text(
+            colour = unique(x[["facet_text"]]),
+            face = "bold"
+          )
+        }
+      )
+    )
+  ) +
+  labs(x = "", y = "Labelled cell proportions") +
+  scale_fill_manual(values = current_spe@metadata$v2_colours$cell_groups) +
+  scale_y_continuous(
+    labels = scales::percent_format(scale = 1)
+  ) +
+  IMCfuncs::grouped_comp_bxp_theme() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+region_main_outdir <- "outputs/cell_prevalences/2024-08-23T10-01-10"
+
+svglite::svglite(
+  filename = nf("region_main_label_props.svg", region_main_outdir),
+  width = 12,
+  height = 25
+)
+print(region_main_anno_plot)
+dev.off()
+
+rm(
+  prop_comps, prop_plots, labelled_props,
+  current_spe, prev_region_labs, region_main_outdir, region_main_anno_plot
+)
 # QUANTIFY LABELLED CELL PROPORTIONS -------------------------------------------
 add_proportions <- function(x) {
   x %>%

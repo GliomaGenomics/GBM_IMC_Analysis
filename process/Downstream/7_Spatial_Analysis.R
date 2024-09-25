@@ -1113,7 +1113,7 @@ lab_spe <- aggregateNeighbors(
   colPairName = "delaunay_50",
   aggregate_by = "metadata",
   count_by = "delaunay_cn_clusters",
-  name = "prim_delaunay_cn_neighborhood_agg"
+  name = "delaunay_cn_neighborhood_agg"
 )
 
 lab_spe <- detectSpatialContext(
