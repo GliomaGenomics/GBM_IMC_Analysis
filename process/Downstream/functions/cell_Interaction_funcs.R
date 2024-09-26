@@ -126,7 +126,7 @@ delta_surgery_interactions <- function(ia_df,
   delta$interact_type <- factor(delta$interact_type, levels = c("Interacting", "Avoiding", "Prim(I) -> Rec(A)", "Prim(A) -> Rec(I)"))
 
   if (!is.na(title_suffix)) {
-    surgery_split$Prim$plot_labs$title <- glue::glue("{surgery_split$Prim$plot_labs$title} ({title_suffix})")
+    surgery_split$Prim$plot_labs$title <-  glue::glue("Cell-Cell Interactions - {title_suffix}")
   }
 
   return(
