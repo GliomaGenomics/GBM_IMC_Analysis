@@ -1624,7 +1624,50 @@ io$outputs$temp_ia <- nd(
   add_timestamp = FALSE
 )
 
+
 library(scales)
+
+add_states <- function(spe_obj, state_df) {
+    
+    states = str_split_i(colnames(state_df)[-1], "_", 1) %>% unique()
+    
+    for (i in states) {
+        spe_obj[[i]] <- NA
+        spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_high")]]]] <- "high"
+        spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_low")]]]] <- "low"
+        
+        # add the non-NA state labels to each patient/surgery pair 
+        spe_obj[[i]] <- str_c(spe_obj[["patient_surgery"]], spe_obj[[i]], sep = "_")
+        
+    }
+    
+    return(spe_obj)
+}
+
+lab_spe <- add_states(spe_obj = lab_spe, state_df = state_scores)
+
+interactions_histocat <- testInteractions(
+    object = lab_spe[,!is.na(lab_spe[["EMT"]])],
+    group_by = "EMT",
+    label = "manual_gating",
+    colPairName = "delaunay_50",
+    method = "histocat",
+    iter = 1000,
+    p_threshold = 0.01,
+    BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+)
+
+interactions_histocat_df <- interactions_histocat %>%
+    as_tibble() %>%
+    mutate(
+        count_method = "histocat",
+        cell_state = "EMT",
+        state_level = str_extract(group_by, "(?i)(high|low)"),
+        surgery = str_extract(group_by, "(?i)(prim|rec)")
+    )
+
+
+
 
 interactions_histocat <- testInteractions(
   object = lab_spe,
@@ -1647,56 +1690,6 @@ interactions_histocat_df <- interactions_histocat %>%
 saveRDS(interactions_histocat_df, nf("histocat_cell_interactions.rds", io$outputs$temp_ia))
 
 rm(interactions_histocat)
-
-# interactions_classic <- testInteractions(
-#   object = lab_spe,
-#   group_by = "sample_id",
-#   label = "manual_gating",
-#   colPairName = "delaunay_50",
-#   method = "classic",
-#   iter = 1000,
-#   p_threshold = 0.01,
-#   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
-# )
-# 
-# interactions_patch <- testInteractions(
-#   object = lab_spe,
-#   group_by = "sample_id",
-#   label = "manual_gating",
-#   colPairName = "delaunay_50",
-#   method = "patch",
-#   patch_size = 5,
-#   iter = 1000,
-#   p_threshold = 0.01,
-#   BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
-# )
-# 
-# interaction_data <- bind_rows(
-#   {
-#     interactions_classic %>%
-#       as_tibble() %>%
-#       mutate(count_method = "classic")
-#   },
-#   {
-#     interactions_patch %>%
-#       as_tibble() %>%
-#       mutate(count_method = "patch")
-#   }
-# )
-# 
-# interaction_data <- colData(lab_spe)[, c(
-#   "sample_id", "patient", "surgery",
-#   "region_type", "region_type_new"
-# )] %>%
-#   as_tibble() %>%
-#   dplyr::distinct() %>%
-#   dplyr::rename("group_by" = sample_id) %>%
-#   dplyr::left_join(x = interaction_data, by = "group_by")
-# 
-# 
-# saveRDS(interaction_data, nf("cell_interaction_data.rds", io$outputs$temp_ia))
-
-# rm(interactions_classic, interactions_patch)
 
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
 source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
