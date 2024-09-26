@@ -1,3 +1,30 @@
+get_state_interactions <- function(spe_obj, state) {
+  if (!state %in% names(colData(lab_spe))) stop("state not found in colData")
+
+  interactions <- imcRtools::testInteractions(
+    object = spe_obj[, !is.na(spe_obj[[state]])],
+    group_by = state,
+    label = "manual_gating",
+    colPairName = "delaunay_50",
+    method = "histocat",
+    iter = 1000,
+    p_threshold = 0.01,
+    BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
+  )
+
+  interactions_df <- interactions %>%
+    tibble::as_tibble() %>%
+    dplyr::mutate(
+      count_method = "histocat",
+      state = stringr::str_c(state, stringr::str_extract(group_by, "(?i)(high|low)"), sep = "_"),
+      surgery = stringr::str_extract(group_by, "(?i)(prim|rec)"),
+      patient = stringr::str_extract(group_by, "^\\d+") %>% stringr::str_c("Patient", ., sep = " ")
+    )
+
+  split_states <- split(interactions_df, interactions_df$state)
+  return(split_states)
+}
+
 .clean_ia_data <- function(ia_df,
                            filter_by = NA,
                            filter_val = NA,
@@ -62,7 +89,7 @@
     subtitle = glue::glue(
       "graph: delaunay triangulation",
       "count method: {unique(ia_df$count_method)}",
-      "minimum patient filter: {min_patients}",
+      "minimum patients: {min_patients}",
       "p threshold: < 0.01",
       .sep = "\n"
     ),
@@ -122,11 +149,22 @@ delta_surgery_interactions <- function(ia_df,
   delta$interact_type[both_interacting[prim_both == "Interacting" & rec_both == "Avoiding"]] <- "Prim(I) -> Rec(A)"
   delta$interact_type[both_interacting[prim_both == "Avoiding" & rec_both == "Interacting"]] <- "Prim(A) -> Rec(I)"
 
-  delta$interact_in <- factor(delta$interact_in, levels = c("Primary", "Recurrent", "Both"))
-  delta$interact_type <- factor(delta$interact_type, levels = c("Interacting", "Avoiding", "Prim(I) -> Rec(A)", "Prim(A) -> Rec(I)"))
+  delta$interact_in <- factor(
+    delta$interact_in,
+    levels = c("Primary", "Recurrent", "Both")
+  )
+  delta$interact_type <- factor(
+    delta$interact_type,
+    levels = c(
+      "Interacting",
+      "Prim(I) -> Rec(A)",
+      "Avoiding",
+      "Prim(A) -> Rec(I)"
+    )
+  )
 
   if (!is.na(title_suffix)) {
-    surgery_split$Prim$plot_labs$title <-  glue::glue("Cell-Cell Interactions - {title_suffix}")
+    surgery_split$Prim$plot_labs$title <- glue::glue("Cell-Cell Interactions - {title_suffix}")
   }
 
   return(
@@ -136,8 +174,6 @@ delta_surgery_interactions <- function(ia_df,
     )
   )
 }
-
-
 
 plot_ia <- function(ia_clean_list,
                     point_size = 15,
@@ -164,9 +200,9 @@ plot_ia <- function(ia_clean_list,
       name = "",
       values = c(
         "Interacting" = "darkgreen",
+        "Prim(I) -> Rec(A)" = "#adc1a8",
         "Avoiding" = "darkred",
-        "Prim(I) -> Rec(A)" = "blue",
-        "Prim(A) -> Rec(I)" = "purple"
+        "Prim(A) -> Rec(I)" = "#cbaaa6"
       ),
       na.value = "white"
     ) +
@@ -180,18 +216,18 @@ plot_ia <- function(ia_clean_list,
     theme_minimal(base_size = 16) +
     theme(
       panel.grid.major = element_blank(),
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 16, face = "bold"),
+      axis.text.x = element_text(size = 16, angle = 45, hjust = 1, face = "bold"),
       axis.text.y = element_text(size = 16, face = "bold"),
       axis.title = element_text(size = 20, face = "bold", colour = "grey50"),
-      plot.title = element_text(size = 20, face = "bold"),
-      plot.subtitle = element_text(size = 16, face = "italic"),
-      plot.caption = element_text(size = 12, face = "italic")
+      plot.title = element_text(size = 24, face = "bold"),
+      plot.subtitle = element_text(size = 18, face = "italic"),
+      plot.caption = element_text(size = 14, face = "italic")
     ) +
     guides(
       fill = guide_legend(order = 1, override.aes = list(shape = 21, size = point_size, color = "black")),
       shape = guide_legend(order = 2, override.aes = list(size = point_size))
-    ) 
-  
+    )
+
   p <- .add_highlight_regions(baseplot = p, highlight_colors = highlight_colors)
 
   return(p)
@@ -242,42 +278,3 @@ plot_ia <- function(ia_clean_list,
       )
   }
 }
-
-
-
-# code to plot points with shapes
-# p <- ia_df_clean$prim %>%
-#   ggplot(
-#     aes(x = from_label, y = to_label)
-#   ) +
-#   geom_tile(fill = "#fffdfa", color = "grey50", linewidth = 0.1, linetype = 2) +
-#   geom_point(
-#     data = subset(ia_df_clean$prim, !is.na(type)),
-#     aes(fill = type, shape = filter_vals),
-#     color = "black", size = 15, stroke = 0.5, na.rm = TRUE
-#   ) +
-#   scale_shape_manual(
-#     name = "",
-#     values = c("Primary" = 21, "Recurrent" = 22, "Both" = 23)
-#   ) +
-#   scale_fill_manual(
-#     name = "",
-#     values = c("Interacting" = "darkgreen", "Avoiding" = "darkred"),
-#     na.value = "white"
-#   ) +
-#   ggplot2::xlab("from cell type ...") +
-#   ggplot2::ylab("to cell type ...") +
-#   theme_minimal(base_size = 16) +
-#   theme(
-#     panel.grid.major = element_blank(),
-#     axis.text.x = element_text(angle = 45, hjust = 1, size = 16, face = "bold"),
-#     axis.text.y = element_text(size = 16, face = "bold"),
-#     axis.title = element_text(size = 20, face = "bold", colour = "grey50"),
-#     plot.title = element_text(size = 20, face = "bold"),
-#     plot.subtitle = element_text(size = 16, face = "italic"),
-#     plot.caption = element_text(size = 12, face = "italic")
-#   ) +
-#   guides(
-#     fill = guide_legend(order = 1, override.aes = list(shape = 21, size = 15, color = "black")),
-#     shape = guide_legend(order = 2, override.aes = list(size = 15))
-#   )

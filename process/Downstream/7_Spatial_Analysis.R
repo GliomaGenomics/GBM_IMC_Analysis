@@ -148,95 +148,98 @@ dev.off()
 
 # SCORE CELL STATES ------------------------------------------------------------
 state_markers <- list(
-    proliferative = c(
-        spe@metadata$markers$cell_states$Proliferating,
-        spe@metadata$markers$cell_states$Proliferating_stem_cell
-    ),
-    hypoxia = spe@metadata$markers$cell_states$Hypoxia,
-    queiescence = spe@metadata$markers$cell_states$Quiescent_stem_cell,
-    EMT = spe@metadata$markers$cell_states$Epithelial_mesenchymal_transition
+  proliferative = c(
+    spe@metadata$markers$cell_states$Proliferating,
+    spe@metadata$markers$cell_states$Proliferating_stem_cell
+  ),
+  hypoxia = spe@metadata$markers$cell_states$Hypoxia,
+  queiescence = spe@metadata$markers$cell_states$Quiescent_stem_cell,
+  EMT = spe@metadata$markers$cell_states$Epithelial_mesenchymal_transition
 )
 
-classify_cell_states <- function(marker_list, 
-                                 expression_matrix, 
+classify_cell_states <- function(marker_list,
+                                 expression_matrix,
                                  high_threshold = 2, low_threshold = -2) {
-    
-    # Ensure expression_matrix has row names
-    if (is.null(rownames(expression_matrix))) {
-        stop("The expression_matrix must have row names corresponding to marker genes.")
-    }
-    
-    # Ensure marker_list is a named list
-    if (is.null(names(marker_list)) || any(names(marker_list) == "")) {
-        stop("marker_list must be a named list with cell state names.")
-    }
-    
+  # Ensure expression_matrix has row names
+  if (is.null(rownames(expression_matrix))) {
+    stop("The expression_matrix must have row names corresponding to marker genes.")
+  }
 
-    cell_ids <- colnames(expression_matrix)
-    if (is.null(cell_ids)) {
-        stop("The expression_matrix must have column names corresponding to cell IDs.")
-    }
-    
-    state_scores <- data.frame(cell = cell_ids, stringsAsFactors = FALSE)
-    
-    for (state in names(marker_list)) {
-        markers <- marker_list[[state]]
+  # Ensure marker_list is a named list
+  if (is.null(names(marker_list)) || any(names(marker_list) == "")) {
+    stop("marker_list must be a named list with cell state names.")
+  }
 
-        missing_markers <- setdiff(markers, rownames(expression_matrix))
-        if (length(missing_markers) > 0) {
-            warning(paste("Markers not found for state", state, ":", 
-                          paste(missing_markers, collapse = ", ")))
-            markers <- setdiff(markers, missing_markers)
 
-            if (length(markers) == 0) {
-                warning(paste("No valid markers left for state", state, 
-                              ". Skipping this state."))
-                next
-            }
-        }
-        
-        # Extract the expression data for the markers
-        marker_expr <- expression_matrix[markers, , drop = FALSE]
-        
-        # Sum the z-scores if multiple markers, else take the z-score directly
-        if (length(markers) > 1) {
-            # Sum the z-scores across markers for each cell
-            state_sum <- colSums(marker_expr, na.rm = TRUE)
-        } else {
-            # Single marker: take the z-score directly
-            state_sum <- as.numeric(marker_expr)
-            names(state_sum) <- colnames(marker_expr)
-        }
-        
-        # Classify cells as High or Low based on thresholds
-        high_class <- state_sum > high_threshold
-        low_class <- state_sum < low_threshold
-        
-        # Add classification to the state_scores dataframe
-        state_scores[[paste0(state, "_high")]] <- high_class
-        state_scores[[paste0(state, "_low")]] <- low_class
+  cell_ids <- colnames(expression_matrix)
+  if (is.null(cell_ids)) {
+    stop("The expression_matrix must have column names corresponding to cell IDs.")
+  }
+
+  state_scores <- data.frame(cell = cell_ids, stringsAsFactors = FALSE)
+
+  for (state in names(marker_list)) {
+    markers <- marker_list[[state]]
+
+    missing_markers <- setdiff(markers, rownames(expression_matrix))
+    if (length(missing_markers) > 0) {
+      warning(paste(
+        "Markers not found for state", state, ":",
+        paste(missing_markers, collapse = ", ")
+      ))
+      markers <- setdiff(markers, missing_markers)
+
+      if (length(markers) == 0) {
+        warning(paste(
+          "No valid markers left for state", state,
+          ". Skipping this state."
+        ))
+        next
+      }
     }
-    
-    return(state_scores)
+
+    # Extract the expression data for the markers
+    marker_expr <- expression_matrix[markers, , drop = FALSE]
+
+    # Sum the z-scores if multiple markers, else take the z-score directly
+    if (length(markers) > 1) {
+      # Sum the z-scores across markers for each cell
+      state_sum <- colSums(marker_expr, na.rm = TRUE)
+    } else {
+      # Single marker: take the z-score directly
+      state_sum <- as.numeric(marker_expr)
+      names(state_sum) <- colnames(marker_expr)
+    }
+
+    # Classify cells as High or Low based on thresholds
+    high_class <- state_sum > high_threshold
+    low_class <- state_sum < low_threshold
+
+    # Add classification to the state_scores dataframe
+    state_scores[[paste0(state, "_high")]] <- high_class
+    state_scores[[paste0(state, "_low")]] <- low_class
+  }
+
+  return(state_scores)
 }
 
 summarize_states <- function(state_scores, marker_list) {
-    for (state in names(marker_list)) {
-        high_col <- paste0(state, "_high")
-        low_col <- paste0(state, "_low")
-        
-        # Check if the columns exist (in case some states were skipped due to missing markers)
-        if (!(high_col %in% colnames(state_scores)) || !(low_col %in% colnames(state_scores))) {
-            next
-        }
-        
-        high_count <- sum(state_scores[[high_col]], na.rm = TRUE)
-        low_count <- sum(state_scores[[low_col]], na.rm = TRUE)
-        
-        cat(sprintf("State: %s\n", state))
-        cat(sprintf("  High: %d cells\n", high_count))
-        cat(sprintf("  Low: %d cells\n\n", low_count))
+  for (state in names(marker_list)) {
+    high_col <- paste0(state, "_high")
+    low_col <- paste0(state, "_low")
+
+    # Check if the columns exist (in case some states were skipped due to missing markers)
+    if (!(high_col %in% colnames(state_scores)) || !(low_col %in% colnames(state_scores))) {
+      next
     }
+
+    high_count <- sum(state_scores[[high_col]], na.rm = TRUE)
+    low_count <- sum(state_scores[[low_col]], na.rm = TRUE)
+
+    cat(sprintf("State: %s\n", state))
+    cat(sprintf("  High: %d cells\n", high_count))
+    cat(sprintf("  Low: %d cells\n\n", low_count))
+  }
 }
 
 
@@ -245,54 +248,55 @@ plot_state_distribution <- function(expression_matrix = t(assay(spe, "zscore")),
                                     state_markers,
                                     high_threshold = 1.2,
                                     low_threshold = -1.2) {
-    
-    histogram_df <- expression_matrix[, state_markers, drop = FALSE] %>%
-        as.data.frame()
-    
-    if (ncol(histogram_df) > 1) {
-        histogram_df <- histogram_df %>%
-            mutate(state_zscore = rowSums(across(everything()))) %>%
-            select(state_zscore)
-    } else {
-        histogram_df <- histogram_df %>%
-            dplyr::rename(state_zscore = 1)
-    }
-    
-    
-    histogram_df %>%
-        ggplot(aes(x = state_zscore)) +
-        geom_histogram(binwidth = 0.5, fill = "lightblue", color = "black") +
-        geom_vline(xintercept = c(-1.2), linetype = "dashed", linewidth = 1, color = "darkred") +
-        geom_vline(xintercept = c(1.2), linetype = "dashed", linewidth = 1, color = "darkblue") +
-        labs(
-            title = glue::glue("{tools::toTitleCase(state_name)} Score Distribution"),
-            subtitle = glue::glue("low threshold (-1.2); high threshold (1.2)"),
-            x = "z-score",
-            y = "Number of cells"
-        ) +
-        scale_x_continuous(limits = c(-5, 5)) +
-        theme_minimal(base_size = 20) +
-        theme(
-            plot.title = element_text(face = "bold"),
-            plot.subtitle = element_text(face = "italic")
-        )
+  histogram_df <- expression_matrix[, state_markers, drop = FALSE] %>%
+    as.data.frame()
+
+  if (ncol(histogram_df) > 1) {
+    histogram_df <- histogram_df %>%
+      mutate(state_zscore = rowSums(across(everything()))) %>%
+      select(state_zscore)
+  } else {
+    histogram_df <- histogram_df %>%
+      dplyr::rename(state_zscore = 1)
+  }
+
+
+  histogram_df %>%
+    ggplot(aes(x = state_zscore)) +
+    geom_histogram(binwidth = 0.5, fill = "lightblue", color = "black") +
+    geom_vline(xintercept = c(-1.2), linetype = "dashed", linewidth = 1, color = "darkred") +
+    geom_vline(xintercept = c(1.2), linetype = "dashed", linewidth = 1, color = "darkblue") +
+    labs(
+      title = glue::glue("{tools::toTitleCase(state_name)} Score Distribution"),
+      subtitle = glue::glue("low threshold (-1.2); high threshold (1.2)"),
+      x = "z-score",
+      y = "Number of cells"
+    ) +
+    scale_x_continuous(limits = c(-5, 5)) +
+    theme_minimal(base_size = 20) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      plot.subtitle = element_text(face = "italic")
+    )
 }
 
 state_scores <- classify_cell_states(
-    marker_list = state_markers, 
-    expression_matrix = assay(spe, "zscore"),
-    high_threshold = 1.2,
-    low_threshold = -1.2
+  marker_list = state_markers,
+  expression_matrix = assay(spe, "zscore"),
+  high_threshold = 1.2,
+  low_threshold = -1.2
 )
 
-state_histograms =  purrr::imap(state_markers, 
-                                ~plot_state_distribution(state_name = .y, state_markers = .x)
-                                )
+state_histograms <- purrr::imap(
+  state_markers,
+  ~ plot_state_distribution(state_name = .y, state_markers = .x)
+)
 
-pdf(file = nf("cell_state_score_histograms.pdf", io$outputs$temp_out),
-    width = 10,
-    height = 10,
-    onefile = TRUE
+pdf(
+  file = nf("cell_state_score_histograms.pdf", io$outputs$temp_out),
+  width = 10,
+  height = 10,
+  onefile = TRUE
 )
 print(state_histograms)
 dev.off()
@@ -301,9 +305,10 @@ summarize_states(state_scores = state_scores, marker_list = state_markers)
 
 saveRDS(state_scores, file = nf("cell_state_scores.rds", io$outputs$temp_out))
 
-rm(state_histograms, state_markers, 
-   classify_cell_states, plot_state_distribution, summarize_states
-   )
+rm(
+  state_histograms, state_markers,
+  classify_cell_states, plot_state_distribution, summarize_states
+)
 
 # LABELLED CELL SPATIAL COORDINATES --------------------------------------------
 plot_cells <- function(spe_obj,
@@ -882,207 +887,207 @@ plot_cn_enrichment <- function(spe_obj,
                                rev_cells = FALSE,
                                plot_title = "Cellular Neighborhood (CN) Enrichment",
                                plot_caption = ifelse(plot_type == "heatmap" & show_heatmap_text,
-                                                     "*Tile text denotes ncells",
-                                                     ""
+                                 "*Tile text denotes ncells",
+                                 ""
                                ),
                                x_axis_title = "\n\nCN (total cells per CN)",
                                y_axis_title = "",
                                fill_lab = ifelse(scale_on == "none", "", "zscore")) {
-    data_info <- list(
-        samples = "samples: All",
-        graph = str_split_i(cn_label, "_", 1),
-        neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
-        scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
-                                "cell" = "cell types",
-                                "cn" = "neighborhoods",
-                                "none" = "none"
+  data_info <- list(
+    samples = "samples: All",
+    graph = str_split_i(cn_label, "_", 1),
+    neighbor_measure = ifelse(grepl("_exprs_", cn_label), "marker expression", "cell fraction"),
+    scale_on_label = switch(match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+      "cell" = "cell types",
+      "cn" = "neighborhoods",
+      "none" = "none"
+    )
+  )
+
+  if (!is.na(filter_col) & !is.na(filter_val)) {
+    if (length(filter_val) > 1) stop("only one filter_val can be used")
+    if (!filter_col %in% names(colData(spe_obj))) stop("filter_col not found in colData(spe_obj)")
+
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
+    if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
+
+    df <- df %>%
+      dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
+
+    filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
+    data_info$samples <- paste0(filter_col, ": ", filt_vals)
+  } else {
+    df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
+  }
+
+  data_info <- glue::glue(
+    "{data_info$samples}",
+    "graph: {data_info$graph}",
+    "neighbour measure: {data_info$neighbor_measure}",
+    "exprs scaled across: {data_info$scale_on_label}",
+    "minimum zscore: {clip_min}",
+    .null = "n/a",
+    .sep = "\n"
+  )
+
+  lab_df <- table(df[, cn_label], df[, cell_label]) %>%
+    as.data.frame() %>%
+    dplyr::rename(text_lab = Freq)
+
+  tab <- switch(
+    EXPR = match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
+    "cell" = scale(table(df[, cn_label], df[, cell_label])),
+    "cn" = t(scale(table(df[, cell_label], df[, cn_label]))),
+    "none" = table(df[, cn_label], df[, cell_label])
+  )
+
+  tab <- as.data.frame(tab) %>%
+    dplyr::left_join(lab_df, by = c("Var1", "Var2")) %>%
+    dplyr::rename(
+      cn_label = Var1,
+      cell_label = Var2,
+      value = Freq
+    )
+
+  if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
+
+  if (!is.null(clip_min)) {
+    tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
+    scale_min_val <- clip_min
+  } else {
+    scale_min_val <- floor(min(tab$value, na.rm = TRUE)) * 2 / 2
+  }
+
+  scale_max_val <- ceiling(max(tab$value, na.rm = TRUE) * 2) / 2
+  scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
+
+
+  tab$fill_color <- fill_pal[as.numeric(cut(tab$value, breaks = length(fill_pal)))]
+  tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
+
+  tab <- tab %>%
+    group_by(cn_label) %>%
+    summarise(cn_total = sum(text_lab, na.rm = TRUE), .groups = "keep") %>%
+    ungroup() %>%
+    dplyr::left_join(tab, ., by = "cn_label") %>%
+    dplyr::mutate(
+      x_axis_lab = glue::glue("{cn_label}\n({cn_total})"),
+      text_lab_percent = round(text_lab / cn_total * 100)
+    ) %>%
+    dplyr::mutate(
+      dplyr::across(
+        dplyr::starts_with("text_"), ~ ifelse(is.na(value), NA, .)
+      )
+    )
+
+  outplot_theme <- ggplot2::theme_minimal(base_size = 16) +
+    theme(
+      panel.grid.major = element_blank(),
+      axis.text.x = element_text(size = 16, face = "bold"),
+      axis.text.y = element_text(size = 16, face = "bold"),
+      plot.title = element_text(size = 20, face = "bold"),
+      plot.subtitle = element_text(size = 16, face = "italic"),
+      plot.caption = element_text(size = 12, face = "italic")
+    )
+
+  if (match.arg(plot_type, several.ok = FALSE) == "bubble") {
+    tab %>%
+      ggplot(aes(x = cn_label, y = cell_label)) +
+      geom_tile(fill = "#fffdfa", colour = "grey50", linewidth = 0.1, linetype = 2) +
+      geom_point(
+        aes(size = text_lab_percent, fill = value),
+        shape = 21, colour = "black", stroke = 0.75, na.rm = TRUE
+      ) +
+      ggplot2::scale_size(
+        range = c(min_bubble_size, max_bubble_size),
+        breaks = seq(0, 100, 20)
+      ) +
+      ggplot2::scale_fill_gradientn(
+        breaks = scale_breaks,
+        limits = c(scale_min_val, scale_max_val),
+        colours = fill_pal,
+        guide = guide_colourbar(
+          barwidth = 2,
+          barheight = 15,
+          frame.colour = "black",
+          ticks.colour = "black",
+          ticks.linewidth = 0.35,
+          frame.linewidth = 0.35
         )
-    )
-    
-    if (!is.na(filter_col) & !is.na(filter_val)) {
-        if (length(filter_val) > 1) stop("only one filter_val can be used")
-        if (!filter_col %in% names(colData(spe_obj))) stop("filter_col not found in colData(spe_obj)")
-        
-        df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label, filter_col)]
-        if (!filter_val %in% unique(df[, filter_col])) stop("filter_val not found in filter_col")
-        
-        df <- df %>%
-            dplyr::filter(!!rlang::sym(filter_col) %in% filter_val)
-        
-        filt_vals <- tolower(paste0(unique(df[, filter_col]), collapse = ", "))
-        data_info$samples <- paste0(filter_col, ": ", filt_vals)
-    } else {
-        df <- as.data.frame(colData(spe_obj))[, c(cell_label, cn_label)]
-    }
-    
-    data_info <- glue::glue(
-        "{data_info$samples}",
-        "graph: {data_info$graph}",
-        "neighbour measure: {data_info$neighbor_measure}",
-        "exprs scaled across: {data_info$scale_on_label}",
-        "minimum zscore: {clip_min}",
-        .null = "n/a",
-        .sep = "\n"
-    )
-    
-    lab_df <- table(df[, cn_label], df[, cell_label]) %>%
-        as.data.frame() %>%
-        dplyr::rename(text_lab = Freq)
-    
-    tab <- switch(
-        EXPR = match.arg(scale_on, several.ok = FALSE, choices = c("cell", "cn", "none")),
-        "cell" = scale(table(df[, cn_label], df[, cell_label])),
-        "cn" = t(scale(table(df[, cell_label], df[, cn_label]))),
-        "none" = table(df[, cn_label], df[, cell_label])
-    )
-    
-    tab <- as.data.frame(tab) %>%
-        dplyr::left_join(lab_df, by = c("Var1", "Var2")) %>%
-        dplyr::rename(
-            cn_label = Var1,
-            cell_label = Var2,
-            value = Freq
+      ) +
+      labs(
+        title = plot_title,
+        subtitle = data_info,
+        caption = plot_caption,
+        x = x_axis_title,
+        y = y_axis_title,
+        fill = fill_lab,
+        size = "% cells in CN"
+      ) +
+      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
+      outplot_theme +
+      guides(
+        size = guide_legend(
+          order = 1,
+          override.aes = list(fill = "black")
         )
-    
-    if (rev_cells) tab$cell_label <- forcats::fct_rev(tab$cell_label)
-    
-    if (!is.null(clip_min)) {
-        tab$value <- ifelse(tab$value < clip_min, NA, tab$value)
-        scale_min_val <- clip_min
-    } else {
-        scale_min_val <- floor(min(tab$value, na.rm = TRUE)) * 2 / 2
-    }
-    
-    scale_max_val <- ceiling(max(tab$value, na.rm = TRUE) * 2) / 2
-    scale_breaks <- seq(scale_min_val, scale_max_val, 0.5)
-    
-    
-    tab$fill_color <- fill_pal[as.numeric(cut(tab$value, breaks = length(fill_pal)))]
-    tab$text_color <- IMCfuncs::get_text_color(tab$fill_color)
-    
+      )
+  } else {
     tab <- tab %>%
-        group_by(cn_label) %>%
-        summarise(cn_total = sum(text_lab, na.rm = TRUE), .groups = "keep") %>%
-        ungroup() %>%
-        dplyr::left_join(tab, ., by = "cn_label") %>%
-        dplyr::mutate(
-            x_axis_lab = glue::glue("{cn_label}\n({cn_total})"),
-            text_lab_percent = round(text_lab / cn_total * 100)
-        ) %>%
-        dplyr::mutate(
-            dplyr::across(
-                dplyr::starts_with("text_"), ~ ifelse(is.na(value), NA, .)
-            )
+      mutate(
+        across(
+          text_lab,
+          ~ ifelse(!is.na(.),
+            glue::glue("{text_lab}", "({text_lab_percent}%)", .na = "", .sep = "\n"),
+            .
+          )
         )
-    
-    outplot_theme <- ggplot2::theme_minimal(base_size = 16) +
-        theme(
-            panel.grid.major = element_blank(),
-            axis.text.x = element_text(size = 16, face = "bold"),
-            axis.text.y = element_text(size = 16, face = "bold"),
-            plot.title = element_text(size = 20, face = "bold"),
-            plot.subtitle = element_text(size = 16, face = "italic"),
-            plot.caption = element_text(size = 12, face = "italic")
+      )
+
+    tab %>%
+      ggplot(aes(x = cn_label, y = cell_label)) +
+      geom_tile(
+        aes(fill = value),
+        colour = "grey50", linewidth = 0.1, linetype = 2,
+        na.rm = TRUE
+      ) +
+      {
+        if (show_heatmap_text) {
+          geom_text(
+            aes(label = text_lab, colour = text_color),
+            size = 4,
+            fontface = "bold",
+            na.rm = TRUE,
+            show.legend = FALSE
+          )
+        }
+      } +
+      ggplot2::scale_fill_gradientn(
+        colours = fill_pal,
+        breaks = scale_breaks,
+        limits = c(scale_min_val, scale_max_val),
+        na.value = "white",
+        guide = guide_colourbar(
+          barwidth = 2,
+          barheight = 15,
+          frame.colour = "black",
+          ticks.colour = "black",
+          ticks.linewidth = 0.35,
+          frame.linewidth = 0.35
         )
-    
-    if (match.arg(plot_type, several.ok = FALSE) == "bubble") {
-        tab %>%
-            ggplot(aes(x = cn_label, y = cell_label)) +
-            geom_tile(fill = "#fffdfa", colour = "grey50", linewidth = 0.1, linetype = 2) +
-            geom_point(
-                aes(size = text_lab_percent, fill = value),
-                shape = 21, colour = "black", stroke = 0.75, na.rm = TRUE
-            ) +
-            ggplot2::scale_size(
-                range = c(min_bubble_size, max_bubble_size),
-                breaks = seq(0, 100, 20)
-            ) +
-            ggplot2::scale_fill_gradientn(
-                breaks = scale_breaks,
-                limits = c(scale_min_val, scale_max_val),
-                colours = fill_pal,
-                guide = guide_colourbar(
-                    barwidth = 2,
-                    barheight = 15,
-                    frame.colour = "black",
-                    ticks.colour = "black",
-                    ticks.linewidth = 0.35,
-                    frame.linewidth = 0.35
-                )
-            ) +
-            labs(
-                title = plot_title,
-                subtitle = data_info,
-                caption = plot_caption,
-                x = x_axis_title,
-                y = y_axis_title,
-                fill = fill_lab,
-                size = "% cells in CN"
-            ) +
-            scale_x_discrete(labels = unique(tab$x_axis_lab)) +
-            outplot_theme +
-            guides(
-                size = guide_legend(
-                    order = 1,
-                    override.aes = list(fill = "black")
-                )
-            )
-    } else {
-        tab <- tab %>%
-            mutate(
-                across(
-                    text_lab,
-                    ~ ifelse(!is.na(.),
-                             glue::glue("{text_lab}", "({text_lab_percent}%)", .na = "", .sep = "\n"),
-                             .
-                    )
-                )
-            )
-        
-        tab %>%
-            ggplot(aes(x = cn_label, y = cell_label)) +
-            geom_tile(
-                aes(fill = value),
-                colour = "grey50", linewidth = 0.1, linetype = 2,
-                na.rm = TRUE
-            ) +
-            {
-                if (show_heatmap_text) {
-                    geom_text(
-                        aes(label = text_lab, colour = text_color),
-                        size = 4,
-                        fontface = "bold",
-                        na.rm = TRUE,
-                        show.legend = FALSE
-                    )
-                }
-            } +
-            ggplot2::scale_fill_gradientn(
-                colours = fill_pal,
-                breaks = scale_breaks,
-                limits = c(scale_min_val, scale_max_val),
-                na.value = "white",
-                guide = guide_colourbar(
-                    barwidth = 2,
-                    barheight = 15,
-                    frame.colour = "black",
-                    ticks.colour = "black",
-                    ticks.linewidth = 0.35,
-                    frame.linewidth = 0.35
-                )
-            ) +
-            ggplot2::scale_color_identity() +
-            labs(
-                title = plot_title,
-                subtitle = data_info,
-                caption = plot_caption,
-                x = x_axis_title,
-                y = y_axis_title,
-                fill = fill_lab
-            ) +
-            scale_x_discrete(labels = unique(tab$x_axis_lab)) +
-            outplot_theme
-    }
+      ) +
+      ggplot2::scale_color_identity() +
+      labs(
+        title = plot_title,
+        subtitle = data_info,
+        caption = plot_caption,
+        x = x_axis_title,
+        y = y_axis_title,
+        fill = fill_lab
+      ) +
+      scale_x_discrete(labels = unique(tab$x_axis_lab)) +
+      outplot_theme
+  }
 }
 
 
@@ -1624,51 +1629,11 @@ io$outputs$temp_ia <- nd(
   add_timestamp = FALSE
 )
 
-
 library(scales)
 
-add_states <- function(spe_obj, state_df) {
-    
-    states = str_split_i(colnames(state_df)[-1], "_", 1) %>% unique()
-    
-    for (i in states) {
-        spe_obj[[i]] <- NA
-        spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_high")]]]] <- "high"
-        spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_low")]]]] <- "low"
-        
-        # add the non-NA state labels to each patient/surgery pair 
-        spe_obj[[i]] <- str_c(spe_obj[["patient_surgery"]], spe_obj[[i]], sep = "_")
-        
-    }
-    
-    return(spe_obj)
-}
+source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
 
-lab_spe <- add_states(spe_obj = lab_spe, state_df = state_scores)
-
-interactions_histocat <- testInteractions(
-    object = lab_spe[,!is.na(lab_spe[["EMT"]])],
-    group_by = "EMT",
-    label = "manual_gating",
-    colPairName = "delaunay_50",
-    method = "histocat",
-    iter = 1000,
-    p_threshold = 0.01,
-    BPPARAM = BiocParallel::SerialParam(RNGseed = 123)
-)
-
-interactions_histocat_df <- interactions_histocat %>%
-    as_tibble() %>%
-    mutate(
-        count_method = "histocat",
-        cell_state = "EMT",
-        state_level = str_extract(group_by, "(?i)(high|low)"),
-        surgery = str_extract(group_by, "(?i)(prim|rec)")
-    )
-
-
-
-
+# Test cell interactions across patient/surgery groups
 interactions_histocat <- testInteractions(
   object = lab_spe,
   group_by = "patient_surgery",
@@ -1681,43 +1646,138 @@ interactions_histocat <- testInteractions(
 )
 
 interactions_histocat_df <- interactions_histocat %>%
-  as_tibble() %>%
-  mutate(
+  tibble::as_tibble() %>%
+  dplyr::mutate(
     count_method = "histocat",
-    surgery = str_extract(group_by, "(?i)(prim|rec)$")
+    surgery = stringr::str_extract(group_by, "(?i)(prim|rec)"),
+    patient = stringr::str_extract(group_by, "^\\d+") %>% stringr::str_c("Patient", ., sep = " ")
   )
 
-saveRDS(interactions_histocat_df, nf("histocat_cell_interactions.rds", io$outputs$temp_ia))
 
-rm(interactions_histocat)
+# update the labelled spatial object to include the cell states
+add_states <- function(spe_obj, state_df) {
+  states <- str_split_i(colnames(state_df)[-1], "_", 1) %>% unique()
+
+  for (i in states) {
+    spe_obj[[i]] <- NA
+    spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_high")]]]] <- "high"
+    spe_obj[[i]][rownames(colData(spe_obj)) %in% state_df$cell[state_df[[paste0(i, "_low")]]]] <- "low"
+
+    # add the non-NA state labels to each patient/surgery pair
+    spe_obj[[i]] <- str_c(spe_obj[["patient_surgery"]], spe_obj[[i]], sep = "_")
+  }
+
+  return(spe_obj)
+}
+lab_spe <- add_states(spe_obj = lab_spe, state_df = state_scores)
+
+state_interactions <- purrr::map(
+  list("EMT", "proliferative", "hypoxia", "queiescence"),
+  ~ get_state_interactions(spe_obj = lab_spe, state = .x)
+)
+
+save_interactions <- list_flatten(state_interactions)
+save_interactions$patient_surgery <- interactions_histocat_df
+
+saveRDS(save_interactions, nf("histocat_cell_interactions.rds", io$outputs$temp_ia))
+
+rm(
+  interactions_histocat,
+  interactions_histocat_df,
+  save_interactions,
+  state_interactions,
+  state_scores
+)
 
 # VISUALISE CELL INTERACTION ANALYSIS ------------------------------------------
-source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
+# load previously saved cell interactions
+interacts <- readRDS("outputs/spatial_analysis/2024-09-25T15-19-12/cellular_interactions/histocat_cell_interactions_2024-09-26T15-07-13.rds")
+
+patients <- split(interacts$patient_surgery, interacts$patient_surgery$patient)
+
+patients <- purrr::imap(patients, ~ {
+  delta_surgery_interactions(
+    ia_df = .x,
+    patient_min = 1,
+    title_suffix = .y
+  )
+})
+patients <- purrr::imap(patients, ~ plot_ia(ia_clean_list = .x))
+
+all <- delta_surgery_interactions(interacts$patient_surgery)
+all <- plot_ia(ia_clean_list = all)
 
 pdf(
-    file = nf("cell_interactions.pdf", io$outputs$temp_ia),
-    width = 12,
-    height = 12,
-    onefile = TRUE
+  file = nf("patient_surgery.pdf", io$outputs$temp_ia),
+  width = 15,
+  height = 15,
+  onefile = TRUE
 )
-clean_ia_data(
-    ia_df = interactions_histocat_df,
-    filter_by = "surgery",
-    filter_val = "Prim",
-    min_patients = 3
-) %>%
-    plot_ia(ia_clean_df = .)
 
-
-clean_ia_data(
-    ia_df = interactions_histocat_df,
-    filter_by = "surgery",
-    filter_val = "Rec",
-    min_patients = 3
-) %>%
-    plot_ia(ia_clean_df = .)
-
+print(all)
+print(patients)
 dev.off()
+
+rm(all, patients)
+
+# remove the patient_surgery interactions and just keep the state interactions
+interacts <- interacts[-grep("patient_surgery", names(interacts))]
+
+states_min_1 <- purrr::imap(interacts, ~ {
+  delta_surgery_interactions(
+    ia_df = .x,
+    patient_min = 1,
+    title_suffix = str_replace(.y, "_", " ")
+  )
+})
+states_min_1 <- purrr::imap(states_min_1, ~ plot_ia(ia_clean_list = .x))
+
+states_min_2 <- purrr::imap(interacts, ~ {
+  delta_surgery_interactions(
+    ia_df = .x,
+    patient_min = 2,
+    title_suffix = str_replace(.y, "_", " ")
+  )
+})
+states_min_2 <- purrr::imap(states_min_2, ~ plot_ia(ia_clean_list = .x))
+
+states_min_3 <- purrr::imap(interacts, ~ {
+  delta_surgery_interactions(
+    ia_df = .x,
+    patient_min = 3,
+    title_suffix = str_replace(.y, "_", " ")
+  )
+})
+states_min_3 <- purrr::imap(states_min_3, ~ plot_ia(ia_clean_list = .x))
+
+pdf(
+  file = nf("min_patient=1_states.pdf", io$outputs$temp_ia),
+  width = 15,
+  height = 15,
+  onefile = TRUE
+)
+print(states_min_1)
+dev.off()
+
+pdf(
+  file = nf("min_patient=2_states.pdf", io$outputs$temp_ia),
+  width = 15,
+  height = 15,
+  onefile = TRUE
+)
+print(states_min_2)
+dev.off()
+
+pdf(
+  file = nf("min_patient=3_states.pdf", io$outputs$temp_ia),
+  width = 15,
+  height = 15,
+  onefile = TRUE
+)
+print(states_min_3)
+dev.off()
+
+rm(states_min_1, states_min_2, states_min_3, interacts)
 
 # SAVE DATA --------------------------------------------------------------------
 saveRDS(lab_spe, nf("lab_spe.rds", io$outputs$temp_out))
