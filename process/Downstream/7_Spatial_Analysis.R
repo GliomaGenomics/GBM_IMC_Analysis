@@ -1249,6 +1249,151 @@ plot_cn_labels(
 )
 dev.off()
 
+# VISUALISE CELLULAR NEIGHBORHOOD CENTROID FRACTIONS ---------------------------
+source("process/Downstream/functions/plot_themes.R")
+
+plot_centroid_fractions <- function(
+        spe_obj, 
+        anno = c("fine", "main"),
+        surgery_col = "surgery",
+        cn_label = "delaunay_cn_clusters"
+){
+    
+    if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
+    if (!surgery_col %in% names(colData(spe_obj))) stop("surgery col not found in colData(spe_obj)")
+    
+    anno_info <- switch(
+        EXPR = match.arg(anno, several.ok = FALSE),
+        fine = list(
+            label = "manual_gating",
+            colors = spe_obj@metadata$v2_colours$cells
+        ),
+        main = list(
+            label = "main_anno_v2",
+            colors = spe_obj@metadata$v2_colours$cell_groups
+        )
+    )
+    
+    cn_prop <- as.data.frame(colData(spe_obj))[, c(anno_info$label, cn_label, surgery_col)]
+    
+    cn_label_prop <- cn_prop %>%
+        dplyr::select(
+            label = !!sym(anno_info$label), 
+            cn = !!sym(cn_label)
+        ) %>%
+        dplyr::group_by(label, cn) %>%
+        dplyr::summarise(freq = n(), .groups = "drop") %>%
+        dplyr::group_by(cn) %>%
+        dplyr::mutate(
+            cn_total_freq = sum(freq),
+            cn_prop = freq / cn_total_freq * 100
+        ) %>%
+        dplyr::ungroup()
+    
+    
+    cn_label_prop <- cn_prop %>%
+        dplyr::select(
+            label = !!sym(anno_info$label),
+            cn = !!sym(cn_label),
+            pheno = !!sym(surgery_col)
+        ) %>%
+        dplyr::group_by(cn, pheno) %>%
+        dplyr::summarise(pheno_freq = n(), .groups = "drop") %>%
+        dplyr::left_join(cn_label_prop, ., by = "cn", relationship = "many-to-many")
+    
+    cn_pheno_counts <- cn_label_prop %>%
+        dplyr::select(label, cn, pheno, pheno_freq) %>%
+        tidyr::pivot_wider(names_from = pheno, values_from = pheno_freq) %>%
+        dplyr::mutate(gap = Rec - Prim) %>%
+        dplyr::group_by(cn) %>%
+        dplyr::mutate(max = max(Prim, Rec)) %>%
+        dplyr::ungroup() %>%
+        tidyr::pivot_longer(c(Prim, Rec), names_to = "pheno", values_to = "pheno_freq")
+    
+    # Left: facetted stacked barplot of cellular neighborhood proportions
+    p1 <- cn_label_prop %>%
+        ggplot(
+            aes(x = cn, y = freq, 
+                fill = forcats::fct_rev(label), 
+                color = forcats::fct_rev(label)
+            )
+        ) +
+        geom_bar(stat = "identity", position = "fill") +
+        labs(
+            x = "Cellular Neighborhoods"
+        ) +
+        coord_flip() +
+        facet_wrap(~cn, scales = "free_y", ncol = 1) +
+        scale_y_continuous(
+            labels = scales::percent,
+            minor_breaks = seq(0, 1, 0.1),
+            breaks = seq(0, 1, 0.2)
+        ) +
+        scale_fill_manual(
+            values = anno_info$colors
+        ) +
+        scale_color_manual(
+            values = anno_info$colors
+        ) +
+        .horizonal_facet_prop_theme(
+            panel_spacing_mm = 10,
+            show_y_axis_text = TRUE,
+            show_panel_border = FALSE,
+            axis.title.y = element_text(size = 25, face = "italic", angle = 90)
+        ) +
+        guides(
+            fill = guide_legend(reverse = TRUE),
+            color = guide_legend(reverse = TRUE)
+        )    
+    
+    # Right: facetted dumbell plot showing the cell counts per cellular neighborhood
+    p2 <- cn_pheno_counts %>%
+        ggplot(aes(x = pheno_freq, y = cn)) +
+        geom_line(aes(group = cn), color = "#E7E7E7", linewidth = 10) +
+        geom_point(aes(color = pheno), size = 10) +
+        geom_text(aes(label = pheno_freq, color = pheno),
+                  size = 5,
+                  nudge_x = if_else(cn_pheno_counts$pheno_freq == cn_pheno_counts$max, 275, -275),
+                  hjust = if_else(cn_pheno_counts$pheno_freq == cn_pheno_counts$max, 0, 1)
+        ) +
+        facet_wrap(~cn, scales = "free_y", ncol = 1) +
+        scale_color_manual(values = spe_obj@metadata$v2_colours$dataset_pheno) +
+        .horizonal_facet_prop_theme(
+            panel_spacing_mm = 10,
+            show_y_axis_text = FALSE,
+            show_panel_border = FALSE,
+            show_x_axis_text = FALSE,
+            show_x_gridlines = FALSE
+        ) 
+    
+    return(
+        p1 + p2 + plot_layout(guides = "collect")
+    )
+    
+}
+
+svglite::svglite(
+    filename = nf("delaunay_cn_main_anno_props.svg", io$outputs$temp_cn),
+    width = 25,
+    height = 15
+)
+plot_centroid_fractions(
+    spe_obj = lab_spe,
+    anno = "main"
+)
+dev.off()
+
+svglite::svglite(
+    filename = nf("delaunay_cn_fine_anno_props.svg", io$outputs$temp_cn),
+    width = 25,
+    height = 15
+)
+plot_centroid_fractions(
+    spe_obj = lab_spe,
+    anno = "fine"
+    )
+dev.off()
+
 # SPATIAL CONTEXT ANALYSIS -----------------------------------------------------
 # The spatial context analysis is a follow-on method to the cellular neighbourhood
 # and identifies tissue regions in which distinct cellular neighbourhoods may be interacting.
