@@ -871,6 +871,52 @@ plot_cn(
 )
 dev.off()
 
+# VISUALISE CELLULAR NEIGHBORHOOD CELL COUNTS ----------------------------------
+plot_cn_counts <- function(spe_obj,
+                           group_col = "surgery",
+                           cn_col = "delaunay_cn_clusters",
+                           cn_colours = lab_spe@metadata$v2_colours$cn_colours) {
+    cns <- colData(lab_spe)[, c(group_col, cn_col)] %>%
+        as.data.frame() %>%
+        dplyr::rename(cn = !!sym(cn_col))
+    
+    cn_counts <- cns %>%
+        group_by(cn) %>%
+        summarise(total_cells = n(), .groups = "drop")
+    
+    cns %>%
+        group_by(!!sym(group_col), cn) %>%
+        summarise(cells = n(), .groups = "drop") %>%
+        left_join(cn_counts, by = "cn") %>%
+        mutate(cn_prop = cells / total_cells) %>%
+        ggplot(aes(x = forcats::fct_rev(!!sym(group_col)), y = cn_prop, fill = cn)) +
+        geom_bar(stat = "identity", position = "dodge", color = "black") +
+        scale_y_continuous(
+            labels = scales::percent_format(),
+            breaks = seq(0, 1, 0.1)
+        ) +
+        facet_wrap(~cn) +
+        scale_fill_manual(values = cn_colours) +
+        coord_flip() +
+        IMCfuncs::facetted_cell_prop_theme() +
+        ylab("Fraction of total cells in each CN") +
+        theme(
+            legend.position = "none",
+            axis.title.y = element_blank()
+        )
+}
+
+pdf(
+    file = nf("delaunay_cn_counts.pdf", io$outputs$temp_cn),
+    width = 20,
+    height = 15,
+    onefile = TRUE
+)
+plot_cn_counts(spe_obj = lab_spe, group_col = "surgery")
+plot_cn_counts(spe_obj = lab_spe, group_col = "patient")
+plot_cn_counts(spe_obj = lab_spe, group_col = "patient_surgery")
+dev.off()
+
 # VISUALISE CELLULAR NEIGHBORHOOD ENRICHMENT -----------------------------------
 plot_cn_enrichment <- function(spe_obj,
                                filter_col = NA,
