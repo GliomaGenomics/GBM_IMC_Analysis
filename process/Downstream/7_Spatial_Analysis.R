@@ -876,7 +876,7 @@ plot_cn_counts <- function(spe_obj,
                            group_col = "surgery",
                            cn_col = "delaunay_cn_clusters",
                            cn_colours = lab_spe@metadata$v2_colours$cn_colours) {
-    cns <- colData(lab_spe)[, c(group_col, cn_col)] %>%
+    cns <- colData(spe_obj)[, c(group_col, cn_col)] %>%
         as.data.frame() %>%
         dplyr::rename(cn = !!sym(cn_col))
     
