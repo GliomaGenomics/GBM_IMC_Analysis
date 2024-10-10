@@ -310,6 +310,128 @@ rm(
   classify_cell_states, plot_state_distribution, summarize_states
 )
 
+# MALIGNANT CELL STATE SCORES PROPORTIONS --------------------------------------
+state_scores <- readRDS("outputs/spatial_analysis/2024-09-25T15-19-12/cell_state_scores_2024-09-25T15-26-51.rds")
+
+all_cancer <- colData(lab_spe)[, c("main_anno_v2", "manual_gating", "patient", "surgery")] %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("cell") %>%
+  left_join(state_scores, by = "cell") %>%
+  filter(main_anno_v2 == "Cancer") %>%
+  select(-main_anno_v2)
+
+all_cancer_long <- all_cancer %>%
+  mutate(proliferative = case_when(
+    proliferative_high == TRUE ~ "high",
+    proliferative_low == TRUE ~ "low",
+    TRUE ~ "medium"
+  )) %>%
+  mutate(hypoxia = case_when(
+    hypoxia_high == TRUE ~ "high",
+    hypoxia_low == TRUE ~ "low",
+    TRUE ~ "medium"
+  )) %>%
+  mutate(quiescence = case_when(
+    queiescence_high == TRUE ~ "high",
+    queiescence_low == TRUE ~ "low",
+    TRUE ~ "medium"
+  )) %>%
+  mutate(EMT = case_when(
+    EMT_high == TRUE ~ "high",
+    EMT_low == TRUE ~ "low",
+    TRUE ~ "medium"
+  )) %>%
+  select(-ends_with(c("_high", "_low"))) %>%
+  tidyr::pivot_longer(
+    cols = ends_with(c("proliferative", "hypoxia", "quiescence", "EMT")),
+    names_to = "state",
+    values_to = "category"
+  ) %>%
+  mutate(across(manual_gating, as.character))
+
+all_cancer_long_props <- all_cancer_long %>%
+  group_by(manual_gating, surgery, state) %>%
+  summarise(total_cells = n(), .groups = "drop") %>%
+  left_join(all_cancer_long, ., by = c("manual_gating", "surgery", "state")) %>%
+  group_by(manual_gating, surgery, state, category) %>%
+  summarise(
+    cells = n(),
+    percentage = n() / total_cells[1],
+    .groups = "drop"
+  ) %>%
+  mutate(across(category, ~ factor(., levels = c("low", "medium", "high"))))
+
+
+svglite::svglite(
+  file = nf("cancer_cell_state_props.svg", "outputs/cell_prevalences/2024-08-23T10-01-10"),
+  width = 18,
+  height = 15
+)
+
+all_cancer_long_props %>%
+  ggplot(
+    aes(
+      x = surgery,
+      y = percentage,
+      fill = forcats::fct_rev(category)
+    )
+  ) +
+  geom_bar(stat = "identity", position = "stack", colour = "black") +
+  facet_grid(state ~ manual_gating) +
+  labs(y = "") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_fill_manual(
+    values = c(
+      "low" = "#440154FF",
+      "medium" = "white",
+      "high" = "#FDE725FF"
+    )
+  ) +
+  IMCfuncs::facetted_cell_prop_theme(text_size = 24) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(size = 24)
+  )
+
+dev.off()
+
+
+cancer_state_stats <- all_cancer_long_props %>%
+  filter(!category %in% c("medium")) %>%
+  select(-percentage) %>%
+  tidyr::unite(col = state, state, category, sep = "_") %>%
+  tidyr::pivot_wider(
+    names_from = surgery,
+    values_from = cells,
+    values_fill = list(cells = 0)
+  ) %>%
+  split(.$manual_gating) %>%
+  lapply(\(x){
+    y <- x[, c("state", "Prim", "Rec")]
+    y <- as.data.frame(y)
+    rownames(y) <- x$state
+    return(y[, c("Prim", "Rec")])
+  })
+
+cancer_state_stats <- purrr::imap(cancer_state_stats, ~ {
+  out <- rstatix::pairwise_fisher_test(as.matrix(.x), p.adjust.method = "fdr")
+  out$cancer_cell_type <- .y
+  out <- dplyr::relocate(out, cancer_cell_type)
+  return(out)
+})
+cancer_state_stats <- bind_rows(cancer_state_stats)
+
+openxlsx::write.xlsx(
+  x = cancer_state_stats,
+  file = nf(
+    "cancer_cell_state_fisher_test_stats.xlsx",
+    "outputs/cell_prevalences/2024-08-23T10-01-10"
+  ),
+  asTable = TRUE
+)
+
+rm(all_cancer, all_cancer_long, all_cancer_long_props, cancer_state_stats)
+
 # LABELLED CELL SPATIAL COORDINATES --------------------------------------------
 plot_cells <- function(spe_obj,
                        patient = c("64", "67", "71", "82", "84"),
@@ -876,41 +998,41 @@ plot_cn_counts <- function(spe_obj,
                            group_col = "surgery",
                            cn_col = "delaunay_cn_clusters",
                            cn_colours = lab_spe@metadata$v2_colours$cn_colours) {
-    cns <- colData(spe_obj)[, c(group_col, cn_col)] %>%
-        as.data.frame() %>%
-        dplyr::rename(cn = !!sym(cn_col))
-    
-    cn_counts <- cns %>%
-        group_by(cn) %>%
-        summarise(total_cells = n(), .groups = "drop")
-    
-    cns %>%
-        group_by(!!sym(group_col), cn) %>%
-        summarise(cells = n(), .groups = "drop") %>%
-        left_join(cn_counts, by = "cn") %>%
-        mutate(cn_prop = cells / total_cells) %>%
-        ggplot(aes(x = forcats::fct_rev(!!sym(group_col)), y = cn_prop, fill = cn)) +
-        geom_bar(stat = "identity", position = "dodge", color = "black") +
-        scale_y_continuous(
-            labels = scales::percent_format(),
-            breaks = seq(0, 1, 0.1)
-        ) +
-        facet_wrap(~cn) +
-        scale_fill_manual(values = cn_colours) +
-        coord_flip() +
-        IMCfuncs::facetted_cell_prop_theme() +
-        ylab("Fraction of total cells in each CN") +
-        theme(
-            legend.position = "none",
-            axis.title.y = element_blank()
-        )
+  cns <- colData(spe_obj)[, c(group_col, cn_col)] %>%
+    as.data.frame() %>%
+    dplyr::rename(cn = !!sym(cn_col))
+
+  cn_counts <- cns %>%
+    group_by(cn) %>%
+    summarise(total_cells = n(), .groups = "drop")
+
+  cns %>%
+    group_by(!!sym(group_col), cn) %>%
+    summarise(cells = n(), .groups = "drop") %>%
+    left_join(cn_counts, by = "cn") %>%
+    mutate(cn_prop = cells / total_cells) %>%
+    ggplot(aes(x = forcats::fct_rev(!!sym(group_col)), y = cn_prop, fill = cn)) +
+    geom_bar(stat = "identity", position = "dodge", color = "black") +
+    scale_y_continuous(
+      labels = scales::percent_format(),
+      breaks = seq(0, 1, 0.1)
+    ) +
+    facet_wrap(~cn) +
+    scale_fill_manual(values = cn_colours) +
+    coord_flip() +
+    IMCfuncs::facetted_cell_prop_theme() +
+    ylab("Fraction of total cells in each CN") +
+    theme(
+      legend.position = "none",
+      axis.title.y = element_blank()
+    )
 }
 
 pdf(
-    file = nf("delaunay_cn_counts.pdf", io$outputs$temp_cn),
-    width = 20,
-    height = 15,
-    onefile = TRUE
+  file = nf("delaunay_cn_counts.pdf", io$outputs$temp_cn),
+  width = 20,
+  height = 15,
+  onefile = TRUE
 )
 plot_cn_counts(spe_obj = lab_spe, group_col = "surgery")
 plot_cn_counts(spe_obj = lab_spe, group_col = "patient")
