@@ -504,8 +504,9 @@ labelled_props <- function(df,
     tidyr::unnest_wider(count)
 
   plot_data %>%
-    ggplot2::ggplot(aes(x = surgery, y = freq, fill = label, colour = label)) +
-    geom_bar(stat = "identity", position = "fill") +
+    ggplot2::ggplot(aes(x = surgery, y = freq, fill = label)) +
+    geom_bar(stat = "identity", position = "fill", color = "black") +
+    coord_flip() +
     facet_grid(
       rows = if (!is.null(rowgroups)) ggplot2::vars(!!ggplot2::sym(rowgroups)) else NULL,
       cols = if (!is.null(colgroups)) ggplot2::vars(!!ggplot2::sym(colgroups)) else NULL
@@ -529,6 +530,14 @@ prop_comps <- tribble(
   "regions", "fine_anno", "patient", "ROI", spe@metadata$v2_colours$cells
 )
 
+labelled_props(
+  df = regions,
+  label_col = "main_anno",
+  colgroups = NULL,
+  rowgroups = NULL,
+  color_palette = spe@metadata$v2_colours$cell_groups
+)
+
 prop_plots <- pmap(prop_comps, ~ {
   labelled_props(
     df = get(..1, envir = globalenv()),
@@ -546,7 +555,97 @@ pdf(
 prop_plots
 dev.off()
 
+# VISUALISE LABELLED CELL PROPORTIONS (V2) -------------------------------------
+plot_data <- regions %>%
+  tidyr::unnest_longer(col = fine_anno, values_to = "count") %>%
+  tidyr::unnest_wider(count) %>%
+  dplyr::select(
+    patient,
+    surgery, labelled, label, freq
+  ) %>%
+  dplyr::group_by(
+    patient,
+    surgery, label
+  ) %>%
+  dplyr::summarise(
+    prop = sum(freq) / sum(labelled),
+    .groups = "drop"
+  )
 
+main <- plot_data %>%
+  ggplot2::ggplot(
+    aes(
+      x = forcats::fct_rev(surgery),
+      y = prop,
+      fill = forcats::fct_rev(label)
+    )
+  ) +
+  geom_bar(stat = "identity", position = "stack", color = "black") +
+  coord_flip() +
+  facet_grid(
+    rows = "patient"
+  ) +
+  labs(y = "", x = "", title = "", subtitle = "") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  ggplot2::scale_fill_manual(values = spe@metadata$v2_colours$cell_groups) +
+  IMCfuncs::facetted_cell_prop_theme(text_size = 24) +
+  theme(
+    axis.text.y = element_text(size = 24),
+    axis.text.x = element_text(angle = 0),
+  )
+
+fine <- plot_data %>%
+  ggplot2::ggplot(
+    aes(
+      x = forcats::fct_rev(surgery),
+      y = prop,
+      fill = forcats::fct_rev(label)
+    )
+  ) +
+  geom_bar(stat = "identity", position = "stack", color = "black") +
+  coord_flip() +
+  facet_grid(
+    rows = "patient"
+  ) +
+  labs(y = "", x = "", title = "", subtitle = "") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  ggplot2::scale_fill_manual(values = spe@metadata$v2_colours$cells) +
+  IMCfuncs::facetted_cell_prop_theme(text_size = 24) +
+  theme(
+    axis.text.y = element_text(size = 24),
+    axis.text.x = element_text(angle = 0),
+  )
+
+
+library(patchwork)
+
+
+svglite::svglite(
+  filename = nf("surgery_props.svg", "outputs/cell_prevalences/2024-08-23T10-01-10"),
+  width = 15,
+  height = 10
+)
+
+main + fine +
+  plot_layout(guides = "collect", axes = "collect") &
+  theme(legend.position = "bottom") &
+  guides(fill = guide_legend(ncol = 3))
+
+dev.off()
+
+
+svglite::svglite(
+  filename = nf("patient_props.svg", "outputs/cell_prevalences/2024-08-23T10-01-10"),
+  width = 20,
+  height = 15
+)
+
+main + fine +
+  plot_layout(guides = "collect", axes = "collect")
+
+dev.off()
+
+# VISUALISE MAIN ANNO ACROSS ROI'S ---------------------------------------------
 # This plot is an updated version of the region label plot without the cell
 # state thresholds and with labelled cell proportions across the main cell
 # type annotations for each ROI:

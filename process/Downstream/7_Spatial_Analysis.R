@@ -369,15 +369,17 @@ svglite::svglite(
 )
 
 all_cancer_long_props %>%
+mutate(across(state, ~ifelse(. != "EMT", tools::toTitleCase(.), .))) %>%    
   ggplot(
     aes(
-      x = surgery,
+      x = forcats::fct_rev(surgery),
       y = percentage,
       fill = forcats::fct_rev(category)
     )
   ) +
   geom_bar(stat = "identity", position = "stack", colour = "black") +
-  facet_grid(state ~ manual_gating) +
+  coord_flip() +    
+  facet_grid(manual_gating ~ state) +
   labs(y = "") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_fill_manual(
@@ -389,9 +391,12 @@ all_cancer_long_props %>%
   ) +
   IMCfuncs::facetted_cell_prop_theme(text_size = 24) +
   theme(
-    axis.title.x = element_blank(),
-    axis.text.x = element_text(size = 24)
-  )
+    legend.position = "bottom",  
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 24,),
+    axis.text.x = element_text(angle = 0)
+  ) +
+  guides(fill = guide_legend(reverse = TRUE))    
 
 dev.off()
 
