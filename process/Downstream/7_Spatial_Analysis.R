@@ -28,8 +28,7 @@ library(imcRtools)
 # I/O --------------------------------------------------------------------------
 io <- list(
   inputs = list(
-    input_dir = "outputs/cell_phenotyping",
-    prevelance_out = "outputs/cell_prevalences"
+    input_dir = "outputs/cell_phenotyping"
   ),
   outputs = list(
     out_dir = "outputs/spatial_analysis"
@@ -78,7 +77,6 @@ find_file <- function(dir_path,
 }
 
 io$inputs$data <- find_file(io$inputs$input_dir, file_pattern = "spe_downstream")
-io$inputs$prevelance_out <- find_file(io$inputs$prevelance_out, file_pattern = "prevelance_data")
 
 rm(find_file)
 
