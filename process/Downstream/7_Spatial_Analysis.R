@@ -84,17 +84,17 @@ rm(find_file)
 
 # LOAD DATA --------------------------------------------------------------------
 spe <- readRDS(io$inputs$data)
+
 # Considering the first three regions across each sample and the labelled cells
-lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
+# lab_spe <- spe[, spe$ROI %in% c("001", "002", "003") & !is.na(spe$manual_gating)]
 
-# Load a specific lab_spe object that was previously created:
-
-# lab_spe <- list.files(
-#   path = "outputs/spatial_analysis/2024-09-05T12-01-52",
-#   pattern = "lab_spe",
-#   full.names = TRUE
-# ) %>%
-#   readRDS()
+# PREVIOUSLY CREATED DATA ------------------------------------------------------
+lab_spe <- list.files(
+  path = "outputs/spatial_analysis/2024-09-05T12-01-52",
+  pattern = "lab_spe",
+  full.names = TRUE
+) %>%
+  readRDS()
 
 # LABELLED CELL COUNTS ---------------------------------------------------------
 pdf(
@@ -369,7 +369,7 @@ svglite::svglite(
 )
 
 all_cancer_long_props %>%
-mutate(across(state, ~ifelse(. != "EMT", tools::toTitleCase(.), .))) %>%    
+  mutate(across(state, ~ ifelse(. != "EMT", tools::toTitleCase(.), .))) %>%
   ggplot(
     aes(
       x = forcats::fct_rev(surgery),
@@ -378,7 +378,7 @@ mutate(across(state, ~ifelse(. != "EMT", tools::toTitleCase(.), .))) %>%
     )
   ) +
   geom_bar(stat = "identity", position = "stack", colour = "black") +
-  coord_flip() +    
+  coord_flip() +
   facet_grid(manual_gating ~ state) +
   labs(y = "") +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
@@ -391,12 +391,12 @@ mutate(across(state, ~ifelse(. != "EMT", tools::toTitleCase(.), .))) %>%
   ) +
   IMCfuncs::facetted_cell_prop_theme(text_size = 24) +
   theme(
-    legend.position = "bottom",  
+    legend.position = "bottom",
     axis.title.y = element_blank(),
-    axis.text.y = element_text(size = 24,),
+    axis.text.y = element_text(size = 24, ),
     axis.text.x = element_text(angle = 0)
   ) +
-  guides(fill = guide_legend(reverse = TRUE))    
+  guides(fill = guide_legend(reverse = TRUE))
 
 dev.off()
 
@@ -996,6 +996,91 @@ plot_cn(
     .sep = "\n"
   )
 )
+dev.off()
+
+# VISUALISE INTERACTION GRAPH AND CN SAMPLE PAIRS (PUBLICATION) ----------------
+
+plot_sample <- function(spe_obj,
+                        graph_name = "delaunay_50",
+                        sample_ids = c("64Prim_001", "71Rec_001", "84Rec_002"),
+                        node_label = "manual_gating",
+                        node_size = 2,
+                        plot_title = "",
+                        node_colours = spe_obj@metadata$v2_colours$cells) {
+  single_plot <- imcRtools::plotSpatial(
+    object = spe_obj[, spe_obj$sample_id %in% sample_ids],
+    node_color_by = "manual_gating",
+    img_id = "sample_id",
+    colPairName = graph_name,
+    nodes_first = FALSE,
+    node_size_fix = node_size,
+    ncols = 3,
+    draw_edges = TRUE,
+    flip_y = FALSE,
+    edge_color_fix = "grey"
+  ) +
+    ggtitle(plot_title) +
+    scale_color_manual(values = node_colours) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(legend.position = "right") +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 10),
+        ncol = 1,
+        bycol = TRUE
+      )
+    )
+
+  return(single_plot)
+}
+
+plot_sample_cn <- function(spe_obj,
+                           sample_ids = c("64Prim_001", "71Rec_001", "84Rec_002"),
+                           node_label = "delaunay_cn_clusters",
+                           node_size = 2,
+                           plot_title = "",
+                           plot_subtitle = "",
+                           brewer_pal = "Paired") {
+  imcRtools::plotSpatial(
+    object = spe_obj[, spe_obj$sample_id %in% sample_ids],
+    node_color_by = node_label,
+    img_id = "sample_id",
+    node_size_fix = node_size,
+    flip_y = FALSE,
+    colPairName = NULL,
+    ncols = 3
+  ) +
+    ggtitle(
+      label = plot_title,
+      subtitle = plot_subtitle
+    ) +
+    scale_color_brewer(palette = brewer_pal) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(
+      legend.position = "right",
+      plot.title = element_text(hjust = 0),
+      plot.subtitle = element_text(hjust = 0, size = 14, face = "italic"),
+    ) +
+    guides(
+      color = guide_legend(
+        override.aes = list(size = 10),
+        ncol = 1,
+        bycol = TRUE
+      )
+    )
+}
+
+x <- plot_sample(spe_obj = lab_spe)
+y <- plot_sample_cn(spe_obj = lab_spe)
+
+svglite::svglite(
+  file = nf("interaction_graph_sample_pairs.svg", io$outputs$temp_cn),
+  width = 20,
+  height = 15
+)
+
+x/y + plot_layout(nrow = 2, guides = "collect")
+
 dev.off()
 
 # VISUALISE CELLULAR NEIGHBORHOOD CELL COUNTS ----------------------------------
