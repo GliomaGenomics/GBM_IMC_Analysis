@@ -393,7 +393,7 @@ all_cancer_long_props %>%
   theme(
     legend.position = "bottom",
     axis.title.y = element_blank(),
-    axis.text.y = element_text(size = 24, ),
+    axis.text.y = element_text(size = 24),
     axis.text.x = element_text(angle = 0)
   ) +
   guides(fill = guide_legend(reverse = TRUE))
@@ -1079,7 +1079,7 @@ svglite::svglite(
   height = 15
 )
 
-x/y + plot_layout(nrow = 2, guides = "collect")
+x / y + plot_layout(nrow = 2, guides = "collect")
 
 dev.off()
 
@@ -1510,31 +1510,32 @@ dev.off()
 # VISUALISE CELLULAR NEIGHBORHOOD CENTROID FRACTIONS ---------------------------
 source("process/Downstream/functions/plot_themes.R")
 
-plot_centroid_fractions <- function(spe_obj,
-                                    anno = c("fine", "main"),
-                                    cn_label = "delaunay_cn_clusters",
-                                    surgery_col = "surgery",
-                                    patchwork_ylab = "Cellular Neighborhoods") {
+plot_cn_centroids <- function(spe_obj,
+                              main_anno = "main_anno_v2",
+                              main_colors = spe_obj@metadata$v2_colours$cell_groups,
+                              fine_anno = "manual_gating",
+                              fine_colors = spe_obj@metadata$v2_colours$cells,
+                              cn_label = "delaunay_cn_clusters",
+                              patchwork_ylab = "Cellular Neighborhoods",
+                              legend_pos = "none") {
   if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
-  if (!surgery_col %in% names(colData(spe_obj))) stop("surgery col not found in colData(spe_obj)")
 
-  anno_info <- switch(
-    EXPR = match.arg(anno, several.ok = FALSE),
-    fine = list(
-      label = "manual_gating",
-      colors = spe_obj@metadata$v2_colours$cells
-    ),
+  anno_info <- list(
     main = list(
-      label = "main_anno_v2",
-      colors = spe_obj@metadata$v2_colours$cell_groups
+      data = NULL,
+      label = main_anno,
+      colors = main_colors
+    ),
+    fine = list(
+      data = NULL,
+      label = fine_anno,
+      colors = fine_colors
     )
   )
 
-  cn_prop <- as.data.frame(colData(spe_obj))[, c(anno_info$label, cn_label, surgery_col)]
-
-  cn_label_prop <- cn_prop %>%
+  anno_info$main$data <- as.data.frame(colData(lab_spe))[, c(anno_info$main$label, cn_label)] %>%
     dplyr::select(
-      label = !!sym(anno_info$label),
+      label = !!sym(anno_info$main$label),
       cn = !!sym(cn_label)
     ) %>%
     dplyr::group_by(label, cn) %>%
@@ -1542,40 +1543,32 @@ plot_centroid_fractions <- function(spe_obj,
     dplyr::group_by(cn) %>%
     dplyr::mutate(
       cn_total_freq = sum(freq),
-      cn_prop = freq / cn_total_freq * 100
+      cn_prop = freq / cn_total_freq
     ) %>%
     dplyr::ungroup()
 
-
-  cn_label_prop <- cn_prop %>%
+  anno_info$fine$data <- as.data.frame(colData(lab_spe))[, c(anno_info$fine$label, cn_label)] %>%
     dplyr::select(
-      label = !!sym(anno_info$label),
-      cn = !!sym(cn_label),
-      pheno = !!sym(surgery_col)
+      label = !!sym(anno_info$fine$label),
+      cn = !!sym(cn_label)
     ) %>%
-    dplyr::group_by(cn, pheno) %>%
-    dplyr::summarise(pheno_freq = n(), .groups = "drop") %>%
-    dplyr::left_join(cn_label_prop, ., by = "cn", relationship = "many-to-many")
-
-  cn_pheno_counts <- cn_label_prop %>%
-    dplyr::select(label, cn, pheno, pheno_freq) %>%
-    tidyr::pivot_wider(names_from = pheno, values_from = pheno_freq) %>%
-    dplyr::mutate(gap = Rec - Prim) %>%
+    dplyr::group_by(label, cn) %>%
+    dplyr::summarise(freq = n(), .groups = "drop") %>%
     dplyr::group_by(cn) %>%
-    dplyr::mutate(max = max(Prim, Rec)) %>%
-    dplyr::ungroup() %>%
-    tidyr::pivot_longer(c(Prim, Rec), names_to = "pheno", values_to = "pheno_freq")
+    dplyr::mutate(
+      cn_total_freq = sum(freq),
+      cn_prop = freq / cn_total_freq
+    ) %>%
+    dplyr::ungroup()
 
-  # Left: facetted stacked barplot of cellular neighborhood proportions
-  p1 <- cn_label_prop %>%
+  p1 <- anno_info$main$data %>%
     ggplot(
       aes(
         x = cn, y = freq,
-        fill = forcats::fct_rev(label),
-        color = forcats::fct_rev(label)
+        fill = forcats::fct_rev(label)
       )
     ) +
-    geom_bar(stat = "identity", position = "fill") +
+    geom_bar(stat = "identity", position = "fill", color = "black") +
     labs(
       x = patchwork_ylab
     ) +
@@ -1587,67 +1580,144 @@ plot_centroid_fractions <- function(spe_obj,
       breaks = seq(0, 1, 0.2)
     ) +
     scale_fill_manual(
-      values = anno_info$colors
-    ) +
-    scale_color_manual(
-      values = anno_info$colors
+      values = anno_info$main$colors
     ) +
     .horizonal_facet_prop_theme(
       panel_spacing_mm = 10,
       show_y_axis_text = TRUE,
       show_panel_border = FALSE,
-      axis.title.y = element_text(size = 25, face = "italic", angle = 90)
+      axis.title.y = element_text(size = 40, angle = 90),
+      axis.text.x = element_text(size = 28),
+      legend.position = legend_pos
     ) +
     guides(
-      fill = guide_legend(reverse = TRUE),
-      color = guide_legend(reverse = TRUE)
+      fill = guide_legend(reverse = TRUE, nrow = 1),
     )
 
-  # Right: facetted dumbell plot showing the cell counts per cellular neighborhood
-  p2 <- cn_pheno_counts %>%
-    ggplot(aes(x = pheno_freq, y = cn)) +
-    geom_line(aes(group = cn), color = "#E7E7E7", linewidth = 10) +
-    geom_point(aes(color = pheno), size = 10) +
-    geom_text(aes(label = pheno_freq, color = pheno),
-      size = 5,
-      nudge_x = if_else(cn_pheno_counts$pheno_freq == cn_pheno_counts$max, 275, -275),
-      hjust = if_else(cn_pheno_counts$pheno_freq == cn_pheno_counts$max, 0, 1)
+
+  p2 <- anno_info$fine$data %>%
+    ggplot(
+      aes(
+        x = cn, y = freq,
+        fill = forcats::fct_rev(label)
+      )
     ) +
+    geom_bar(stat = "identity", position = "fill", color = "black") +
+    labs(
+      x = patchwork_ylab
+    ) +
+    coord_flip() +
     facet_wrap(~cn, scales = "free_y", ncol = 1) +
-    scale_color_manual(values = spe_obj@metadata$v2_colours$dataset_pheno) +
+    scale_y_continuous(
+      labels = scales::percent,
+      minor_breaks = seq(0, 1, 0.1),
+      breaks = seq(0, 1, 0.2)
+    ) +
+    scale_fill_manual(
+      values = anno_info$fine$colors
+    ) +
     .horizonal_facet_prop_theme(
       panel_spacing_mm = 10,
-      show_y_axis_text = FALSE,
+      show_y_axis_text = TRUE,
       show_panel_border = FALSE,
-      show_x_axis_text = FALSE,
-      show_x_gridlines = FALSE
+      axis.title.y = element_text(size = 40, angle = 90),
+      axis.text.x = element_text(size = 28),
+      legend.position = legend_pos
+    ) +
+    guides(
+      fill = guide_legend(reverse = TRUE, ncol = 3)
     )
 
+
   return(
-    p1 + p2 + plot_layout(guides = "collect")
+    p1 + p2 + plot_layout(axes = "collect_y", axis_titles = "collect") &
+      theme(axis.text.y = element_text(
+        color = "black",
+        face = "bold",
+        size = 50,
+        margin = margin(t = 0, r = 0, l = 5, b = 0, unit = "mm")
+      ))
   )
+}
+svglite::svglite(
+  filename = nf("delaunay_cn_anno_props.svg", io$outputs$temp_cn),
+  width = 22,
+  height = 20
+)
+plot_cn_centroids(spe_obj = lab_spe)
+dev.off()
+
+
+plot_cn_pheno <- function(spe_obj,
+                          cn_label = "delaunay_cn_clusters",
+                          surgery_col = "surgery",
+                          surgery_colors = spe_obj@metadata$v2_colours$dataset_pheno,
+                          point_size = 10,
+                          point_shape=21, 
+                          point_color="black",
+                          point_alpha = 1,
+                          line_color = "grey",
+                          line_type = 2,
+                          line_width = 1,
+                          y_max_lim = 0.25,
+                          y_lab = "Cellular Neighborhood Proportions",
+                          panel_background_color = "grey99",
+                          cn_label_size = 40,
+                          base_text_size = 30
+) {
+    if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
+    if (!surgery_col %in% names(colData(spe_obj))) stop("surgery col not found in colData(spe_obj)")
+    
+    
+    cn_prop <- as.data.frame(colData(spe_obj))[, c(cn_label, surgery_col)]
+    
+    surgery_totals <- cn_prop %>%
+        dplyr::group_by(!!sym(surgery_col)) %>%
+        dplyr::summarise(surgery_total = n(), .groups = "drop") 
+    
+    cn_surgery_props <- cn_prop %>%
+        dplyr::select(
+            surgery = !!sym(surgery_col),
+            cn = !!sym(cn_label)
+        ) %>%
+        dplyr::group_by(surgery, cn) %>%
+        dplyr::summarise(freq = n(), .groups = "drop") %>%
+        dplyr::left_join(y = surgery_totals, by = surgery_col, relationship = "many-to-one") %>%
+        dplyr::mutate(
+            cn_prop = freq / surgery_total
+        )
+    
+    cn_surgery_props %>%
+        ggplot(aes(x = surgery, y = cn_prop, fill = surgery, group = cn)) +
+        geom_line(color= line_color, linetype = line_type, linewidth = line_width) +
+        geom_point(shape=point_shape, color=point_color, size=point_size, alpha = point_alpha) +
+        facet_wrap(~cn) +
+        labs(x = "", y = y_lab) +
+        scale_fill_manual(values = surgery_colors) +
+        scale_y_continuous(
+            labels = scales::percent_format(accuracy = 1),limits = c(0,y_max_lim)
+        ) + 
+        IMCfuncs::facetted_cell_prop_theme(
+            text_size = base_text_size,
+            facet_stip_text_size = cn_label_size,
+            panel_background = panel_background_color 
+        ) +
+        theme(
+            axis.text.y = element_text(
+                margin = margin(t = 0, r = 0, l = 5, b = 0, unit = "mm")
+            ),
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()
+        )
+    
 }
 
 svglite::svglite(
-  filename = nf("delaunay_cn_main_anno_props.svg", io$outputs$temp_cn),
-  width = 25,
+  filename = nf("delaunay_cn_pheno_comps.svg", io$outputs$temp_cn),
+  width = 18,
   height = 15
 )
-plot_centroid_fractions(
-  spe_obj = lab_spe,
-  anno = "main"
-)
-dev.off()
-
-svglite::svglite(
-  filename = nf("delaunay_cn_fine_anno_props.svg", io$outputs$temp_cn),
-  width = 25,
-  height = 15
-)
-plot_centroid_fractions(
-  spe_obj = lab_spe,
-  anno = "fine"
-)
+plot_cn_pheno(spe_obj = lab_spe)
 dev.off()
 
 # SPATIAL CONTEXT ANALYSIS -----------------------------------------------------
