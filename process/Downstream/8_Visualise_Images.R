@@ -24,7 +24,6 @@ io <- list(
     images = "data/downstream/compensated/images_comp.rds",
     masks = "data/downstream/raw/masks.rds",
     interactions = "outputs/spatial_analysis/2024-09-25T15-19-12/cellular_interactions/histocat_cell_interactions_2024-09-26T15-07-13.rds"
-
   ),
   outputs = list(
     out_dir = "outputs/ROI_images"
@@ -103,38 +102,177 @@ interactions <- readRDS(io$inputs$interactions)
 
 interactions <- interactions$patient_surgery
 
+# IDENTIFY THE PATIENTS WHERE CELLS ARE INTERACING -----------------------------
+signif_patients <- function(interact_df = interactions,
+                            surgery_filt = c("Prim", "Rec"),
+                            from_cell,
+                            to_cell) {
+  if (missing(from_cell) | missing(to_cell)) {
+    cli::cli_abort("Please provide the from_cell and to_cell arguments!")
+  }
+
+  vector_list <- vector("list", length(to_cell))
+  names(vector_list) <- to_cell
+
+  for (i in seq_along(to_cell)) {
+    vector_list[[i]] <- interact_df %>%
+      dplyr::filter(surgery %in% surgery_filt) %>%
+      dplyr::filter(sigval >= 1) %>%
+      dplyr::filter(from_label %in% from_cell) %>%
+      dplyr::filter(to_label %in% to_cell[[i]]) %>%
+      dplyr::arrange(p) %>%
+      dplyr::pull(group_by)
+  }
+
+  common_elements <- Reduce(intersect, vector_list)
+
+  if (length(common_elements) == 0) {
+    cli::cli_alert_danger("No common patients!")
+    cli::cat_line()
+    return(vector_list)
+  } else {
+    cli::cli_alert_success("Common patients:\t{common_elements}")
+    cli::cat_line()
+    return(vector_list)
+  }
+}
+
+# 1. ENDOTHELIAL CELLS INTERACTIONS --------------------------------------------
+signif_patients(
+  surgery_filt = "Prim",
+  from_cell = "Endothelial",
+  to_cell = c("Microglia", "MES")
+)
+cur_id <- grep("^71Prim", names(images), value = TRUE)
+cell_types <- c("Endothelial", "Microglia", "MES")
+
+
+signif_patients(
+  from_cell = "Endothelial",
+  to_cell = c("Macrophage")
+)
+cur_id <- grep("^71Rec", names(images), value = TRUE)
+cell_types <- c("Endothelial", "Macrophage")
+
+# 2. OLIGODENDROCYTES INTERACTIONS ---------------------------------------------
+signif_patients(
+  surgery_filt = "Prim",
+  from_cell = "Oligodendrocyte",
+  to_cell = c("MES")
+)
+
+cur_id <- grep("^64Prim", names(images), value = TRUE)
+cell_types <- c("Oligodendrocyte", "MES")
+
+signif_patients(
+    surgery_filt = "Rec",
+    from_cell = "Oligodendrocyte",
+    to_cell = c("T cell", "Microglia", "Endothelial")
+)
+
+cur_id <- grep("^64Rec", names(images), value = TRUE)
+cell_types <- c("Oligodendrocyte", "T cell", "Microglia", "Endothelial")
+
+
+# 3. ASTROCYTE INTERACTIONS ----------------------------------------------------
+signif_patients(
+  surgery_filt = "Prim",
+  from_cell = "Astrocyte",
+  to_cell = c("Microglia", "Macrophage")
+)
+
+cur_id <- grep("^84Prim", names(images), value = TRUE)
+cell_types <- c("Astrocyte", "Microglia", "Macrophage")
+
+
+
+signif_patients(
+    surgery_filt = "Rec",
+    from_cell = "Astrocyte",
+    to_cell = c("OPC", "NPC")
+)
+
+cur_id <- grep("^71Rec", names(images), value = TRUE)
+cell_types <- c("Astrocyte", "OPC", "NPC")
+
+# 4. NEURON INTERACTIONS -------------------------------------------------------
+signif_patients(
+  surgery_filt = "Prim",
+  from_cell = "Neuron",
+  to_cell = c("Macrophage")
+)
+
+cur_id <- grep("^82Prim", names(images), value = TRUE)
+cell_types <- c("Neuron", "Macrophage")
+
+
+signif_patients(
+    surgery_filt = "Rec",
+    from_cell = "Neuron",
+    to_cell = c("Astrocyte", "MES")
+)
+
+cur_id <- grep("^82Rec", names(images), value = TRUE)
+cell_types <- c("Neuron", "Astrocyte", "MES")
 # CELL VISUALSATION ------------------------------------------------------------
-cur_id <- c("64Prim_001")
+# c(
+#   "T cell", "NK cell", "Macrophage", "Microglia", "AC", "MES", "NPC", "OPC",
+#   "Neuron", "Astrocyte", "Oligodendrocyte", "Endothelial"
+# )
 
 cur_images <- images[names(images) %in% cur_id]
 cur_masks <- masks[names(masks) %in% cur_id]
 
+cell_colours <- c("#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00")
+names(cell_colours) <- cell_types
 
+filt_spe <- lab_spe[, lab_spe$manual_gating %in% cell_types]
+filt_spe$outline_col <- filt_spe$manual_gating
+
+# plotting the cell masks coloured by specific cells
 plotCells(cur_masks,
-  object = lab_spe,
+  object = filt_spe,
   cell_id = "cell_id",
   img_id = "sample_id",
-  # outline_by = "manual_gating",
-  # colour_by = "manual_gating",
-  colour_by = "delaunay_cn_clusters",
+  outline_by = "outline_col",
+  colour_by = "manual_gating",
   background_colour = "black",
-  missing_colour = "black",
-  # colour = list(
-  #     manual_gating = lab_spe@metadata$v2_colours$cells
-  # ),
-  image_title = NULL,
-  scale_bar = list(
-    length = 100,
-    label = expression("100 " ~ mu * "m"),
-    cex = 2,
-    lwidth = 10,
-    colour = "white",
-    position = "bottomright",
-    margin = c(10, 10)
+  missing_colour = "grey20",
+  colour = list(
+    manual_gating = cell_colours
   ),
-  legend = NULL,
-  thick = TRUE
+  display = "single",
+  image_title = NULL,
+  scale_bar = NULL,
+  thick = FALSE,
+  save_plot = list(
+    filename = nf(
+      filename = paste0(unique(str_extract(cur_id, "(?i)^[a-z0-9]+")), ".png"),
+      filepath = io$output$temp_out
+    ),
+    # filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
 )
+# image_title  = list(
+#     text = mcols(cur_images)$sample_id,
+#     colour = "white",
+#     margin = c(10, 10),
+#     position = "topleft",
+#     font = 2,
+#     cex = 4
+# ),
+# scale_bar = list(
+#     length = 100,
+#     label = expression("100" ~ mu *"m"),
+#     colour = "white",
+#     lwidth = 5,
+#     position = "bottomright",
+#     margin = c(75, 20),
+#     frame = length(cur_id),
+#     cex = 3
+# ),
+# margin = 40
 
 # INTERACTIVE IMAGE VISUALSATION -----------------------------------------------
 
