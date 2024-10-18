@@ -165,9 +165,9 @@ cur_id <- grep("^64Prim", names(images), value = TRUE)
 cell_types <- c("Oligodendrocyte", "MES")
 
 signif_patients(
-    surgery_filt = "Rec",
-    from_cell = "Oligodendrocyte",
-    to_cell = c("T cell", "Microglia", "Endothelial")
+  surgery_filt = "Rec",
+  from_cell = "Oligodendrocyte",
+  to_cell = c("T cell", "Microglia", "Endothelial")
 )
 
 cur_id <- grep("^64Rec", names(images), value = TRUE)
@@ -187,9 +187,9 @@ cell_types <- c("Astrocyte", "Microglia", "Macrophage")
 
 
 signif_patients(
-    surgery_filt = "Rec",
-    from_cell = "Astrocyte",
-    to_cell = c("OPC", "NPC")
+  surgery_filt = "Rec",
+  from_cell = "Astrocyte",
+  to_cell = c("OPC", "NPC")
 )
 
 cur_id <- grep("^71Rec", names(images), value = TRUE)
@@ -207,9 +207,9 @@ cell_types <- c("Neuron", "Macrophage")
 
 
 signif_patients(
-    surgery_filt = "Rec",
-    from_cell = "Neuron",
-    to_cell = c("Astrocyte", "MES")
+  surgery_filt = "Rec",
+  from_cell = "Neuron",
+  to_cell = c("Astrocyte", "MES")
 )
 
 cur_id <- grep("^82Rec", names(images), value = TRUE)
@@ -290,64 +290,247 @@ if (interactive()) {
   shiny::runApp(app)
 }
 
-# VISUALISING VASCULAR/OLIGODENDROCYTES ----------------------------------------
-
-# normalise the channel intensities
-# norm_images = cytomapper::normalize(cur_images,
-#                                     separateChannels = TRUE,
-#                                     separateImages = FALSE,
-#                                     inputRange = NULL
-#                                     )
-# clip channel intensities
-# norm_images = normalize(norm_images, inputRange = c(0, 0.2))
-
-png(
-  filename = nf("64_Rec.png", io$output$image_visualisation$paper_2),
-  units = "in",
-  width = 30,
-  height = 15,
-  res = 600
-)
+# 1. ENDOTHELIAL PIXELS --------------------------------------------------------
+cur_id <- "71Prim_003"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
 
 plotPixels(
-
   cur_images,
   colour_by = c(
-    "MOG",
-    "SMA"
+    "SMA",
+    "SOD2"
   ),
   bcg = list(
-    MOG = c(0, 5, 1),
-    SMA = c(0, 10, 1)
+    SMA = c(0, 5, 1),
+    SOD2 = c(0, 5, 1)
   ),
   colour = list(
     SMA = c("black", "red2"),
-    MOG = c("black", "cyan")
+    SOD2 = c("black", "#00FF00")
   ),
-  legend = NULL,
-  image_title = list(
-    text = mcols(cur_images)$`patient_id.V1`,
-    colour = "white",
-    margin = c(10, 10),
-    position = "topleft",
-    font = 2,
-    cex = 5
-  ),
-  scale_bar = list(
-    length = 100,
-    label = expression("100 " ~ mu * "m"),
-    colour = "white",
-    lwidth = 10,
-    position = "bottomright",
-    margin = c(75, 20),
-    frame = length(cur_id),
-    cex = 5
-  ),
-  margin = 40
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
 )
 
-dev.off()
+cur_id <- "71Rec_002"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
 
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "SMA",
+    "IBA1"
+  ),
+  bcg = list(
+    SMA = c(0, 5, 1),
+    IBA1 = c(0, 5, 1)
+  ),
+  colour = list(
+    SMA = c("black", "red2"),
+    IBA1 = c("black", "#0000FF")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+# 2. OLIGODENDROCYTE PIXELS ----------------------------------------------------
+cur_id <- "64Prim_001"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "MOG",
+    "SOD2",
+  ),
+  bcg = list(
+    MOG = c(0, 5, 1),
+    SOD2 = c(0, 5, 1)
+  ),
+  colour = list(
+    MOG = c("black", "red2"),
+    SOD2 = c("black", "#00FF00")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+
+cur_id <- "64Rec_001"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "MOG",
+    "CD3",
+    "SMA"
+  ),
+  bcg = list(
+    MOG = c(0, 6, 1),
+    CD3 = c(0, 6, 1),
+    SMA = c(0, 5, 1)
+  ),
+  colour = list(
+    MOG = c("black", "red2"),
+    CD3 = c("black", "#0000FF"),
+    SMA = c("black", "#FF00FF")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+# 3. ASTROCYTE PIXELS ----------------------------------------------------------
+
+cur_id <- "82Prim_002"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "GFAP",
+    "IBA1"
+  ),
+  bcg = list(
+    GFAP = c(0, 3, 1),
+    IBA1 = c(0, 5, 1)
+  ),
+  colour = list(
+    GFAP = c("black", "red2"),
+    IBA1 = c("black", "#0000FF")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+cur_id <- "71Rec_001"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "GFAP",
+    "SCD5",
+    "BCAN"
+  ),
+  bcg = list(
+    GFAP = c(0, 3, 1),
+    SCD5 = c(0, 2, 1),
+    BCAN = c(0, 8, 1)
+  ),
+  colour = list(
+    GFAP = c("black", "red2"),
+    SCD5 = c("black", "#00FFFF"),
+    BCAN = c("black", "#FF00FF")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+# 4. NEURON PIXELS -------------------------------------------------------------
+cur_id <- "82Prim_002"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "NeuN_FOX3",
+    "IBA1"
+  ),
+  bcg = list(
+    NeuN_FOX3 = c(0, 10, 1),
+    IBA1 = c(0, 2, 1)
+  ),
+  colour = list(
+    NeuN_FOX3 = c("black", "red2"),
+    IBA1 = c("black", "#00FF00")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
+
+
+
+cur_id <- "82Rec_001"
+cur_images <- images[names(images) %in% cur_id]
+cur_masks <- masks[names(masks) %in% cur_id]
+
+plotPixels(
+  cur_images,
+  colour_by = c(
+    "NeuN_FOX3",
+    "GFAP",
+    "SOD2"
+  ),
+  bcg = list(
+    NeuN_FOX3 = c(0, 9, 1),
+    GFAP = c(0, 2, 1),
+    SOD2 = c(0, 5, 1)
+  ),
+  colour = list(
+    NeuN_FOX3 = c("black", "red2"),
+    GFAP = c("black", "#0000FF"),
+    SOD2 = c("black", "#00FFFF")
+  ),
+  image_title = NULL,
+  scale_bar = NULL,
+  display = "single",
+  interpolate = TRUE,
+  save_plot = list(
+    filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
+    scale = 3
+  )
+)
 
 # VISUALISING ASTROCYTES/NEURONS -----------------------------------------------
 
