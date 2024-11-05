@@ -162,7 +162,7 @@ get_marker_exprs <- function(marker_list,
                                "ROI",
                                "main_anno_v2",
                                "manual_gating",
-                               "delaunay_cn_clusters" 
+                               "delaunay_cn_clusters"
                              )) {
   if (!assay_name %in% assayNames(spe_object)) {
     stop("The assay_name must be a valid assay in the spe_object.")
@@ -322,7 +322,6 @@ create_plot <- function(label_data, label_stats, label_name,
                         y_lim_breaks = NULL,
                         y_lim_min = NULL,
                         y_lim_max = NULL) {
-    
   ggplot(label_data, aes(x = comps, y = response, fill = comps)) +
     geom_boxplot() +
     scale_fill_manual(values = plot_colours$surgery) +
@@ -356,17 +355,16 @@ comp_patchwork <- function(comp_list,
                            patchwork_title = "Title",
                            facet_axes = "keep",
                            ncols = 2, nrows = NULL) {
-    
   facets <- unique(levels(comp_list$data$label))
   if (is.null(facets)) facets <- unique(comp_list$data$label)
 
   y_min <- floor(min(comp_list$data$response))
   y_max <- ceiling(max(comp_list$data$response))
   y_breaks <- seq(y_min, y_max, by = 1)
-  
+
   comp_list$stats$y.position <- y_max
-  
-  
+
+
   plots <- purrr::map(facets, ~ {
     label_data <- comp_list$data[comp_list$data$label == .x, ]
     label_stats <- comp_list$stats[comp_list$stats$label == .x, ]
@@ -412,6 +410,162 @@ iwalk(outplot, ~ {
 })
 
 
+# CELLULAR NEIGHBOUR CELL STATES -----------------------------------------------
+source("process/Downstream/functions/plot_themes.R")
+
+global_cn_states <- function(cell_state_df, state, cn_cluster_col = "delaunay_cn_clusters") {
+  plot_data <- cell_state_df %>%
+    mutate(across(!!sym(state), ~ scale_vector(., scale_fun = "zscore")),
+      gloabl_median = median(!!sym(state), na.rm = TRUE)
+    )
+
+  stat_summary <- plot_data %>%
+    group_by(!!sym(cn_cluster_col)) %>%
+    summarise(
+      median = median(!!sym(state), na.rm = TRUE),
+      Q1 = quantile(!!sym(state), 0.25, na.rm = TRUE),
+      Q3 = quantile(!!sym(state), 0.75, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  plot_data <- plot_data %>%
+    left_join(stat_summary, by = cn_cluster_col)
+
+  if (tolower(state) != "emt") {
+    plot_title <- tools::toTitleCase(state)
+  } else {
+    plot_title <- state
+  }
+
+  plot_data %>%
+    ggplot(
+      aes(x = forcats::fct_rev(!!sym(cn_cluster_col)), y = median)
+    ) +
+    geom_pointrange(
+      aes(ymin = Q1, ymax = Q3, group = surgery, fill = "CN Median"),
+      size = 2,
+      shape = 23
+    ) +
+    geom_hline(
+      aes(
+        yintercept = gloabl_median,
+        color = "Global Median"
+      ),
+      linetype = "dashed",
+      linewidth = 1
+    ) +
+    coord_flip() +
+    scale_fill_manual(values = "slateblue") +
+    scale_color_manual(values = "darkgrey") +
+    labs(
+      y = "Protein Marker Abundance (z-score)",
+      x = "Cellular Neighborhoods",
+      title = plot_title
+    ) +
+    IMCfuncs::grouped_comp_bxp_theme() +
+    theme(legend.position = "top") +
+    theme(plot.title = element_text(hjust = 0.5, size = 35))
+}
+
+
+walk(names(state_markers), ~ {
+    svglite::svglite(
+        filename = nf(glue::glue("{.x}_global_cn_cell_states.png"), io$outputs$out_dir),
+        width = 10,
+        height = 10
+    )
+    print(global_cn_states(cell_states, .x))
+    dev.off()
+})
+
+
+surgery_cn_states <- function(cell_state_df, state,
+                              cn_cluster_col = "delaunay_cn_clusters",
+                              surgery_col = "surgery",
+                              median_colours = plot_colours$surgery) {
+  plot_data <- cell_state_df %>%
+    mutate(across(!!sym(state), ~ scale_vector(., scale_fun = "zscore")),
+      global_median = median(!!sym(state), na.rm = TRUE)
+    )
+
+  stat_summary <- plot_data %>%
+    group_by(!!sym(cn_cluster_col), !!sym(surgery_col)) %>%
+    summarise(
+      median = median(!!sym(state), na.rm = TRUE),
+      Q1 = quantile(!!sym(state), 0.25, na.rm = TRUE),
+      Q3 = quantile(!!sym(state), 0.75, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  plot_data <- plot_data %>%
+    left_join(stat_summary, by = c(cn_cluster_col, surgery_col))
+
+  if (tolower(state) != "emt") {
+    plot_title <- tools::toTitleCase(state)
+  } else {
+    plot_title <- state
+  }
+
+  plot_data %>%
+    ggplot(
+      aes(
+        x = forcats::fct_rev(!!sym(cn_cluster_col)),
+        y = median
+      )
+    ) +
+    geom_pointrange(
+      aes(
+        ymin = Q1,
+        ymax = Q3,
+        group = forcats::fct_rev(!!sym(surgery_col)),
+        fill = !!sym(surgery_col)
+      ),
+      size = 2,
+      shape = 21,
+      position = position_dodge(width = 0.75)
+    ) +
+    geom_hline(
+      aes(yintercept = global_median, colour = "Global Median"),
+      linetype = "dashed", linewidth = 1
+    ) +
+    coord_flip() +
+    facet_wrap(facets = vars(!!sym(cn_cluster_col)), scales = "free_y", ncol = 1) +
+    scale_fill_manual(values = median_colours) +
+    scale_color_manual(values = "darkgrey") +
+    labs(
+      y = "Protein Marker Abundance (z-score)",
+      x = "Cellular Neighborhoods",
+      title = plot_title
+    ) +
+    .horizonal_facet_prop_theme(
+      panel_spacing_mm = 10,
+      show_y_axis_text = TRUE,
+      show_panel_border = TRUE,
+      axis.title.y = element_text(size = 40, angle = 90),
+      axis.text.x = element_text(size = 20),
+      legend.position = "top",
+      show_x_gridlines = FALSE,
+      plot.title = element_text(hjust = 0.5, size = 35),
+      axis.title.x = element_text(
+        size = 40,
+          margin = margin(t = 5, r = 0, l = 0, b = 0, unit = "mm")
+      )
+    )
+}
+
+walk(names(state_markers), ~ {
+    svglite::svglite(
+        filename = nf(glue::glue("{.x}_surgery_cn_states.svg"), io$outputs$out_dir),
+        width = 12,
+        height = 22
+    )
+    print(surgery_cn_states(cell_states, .x))
+    dev.off()
+})
+
+
+
+# CLASSIFYING CELL STATES ------------------------------------------------------
 
 classify_cell_states <- function(marker_list,
                                  expression_matrix,
