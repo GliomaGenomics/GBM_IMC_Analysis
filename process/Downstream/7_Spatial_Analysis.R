@@ -146,14 +146,272 @@ dev.off()
 
 # SCORE CELL STATES ------------------------------------------------------------
 state_markers <- list(
-  proliferative = c(
-    spe@metadata$markers$cell_states$Proliferating,
-    spe@metadata$markers$cell_states$Proliferating_stem_cell
-  ),
-  hypoxia = spe@metadata$markers$cell_states$Hypoxia,
-  queiescence = spe@metadata$markers$cell_states$Quiescent_stem_cell,
-  EMT = spe@metadata$markers$cell_states$Epithelial_mesenchymal_transition
+  proliferative = c("Ki67", "SOX2"),
+  hypoxia = c("HIF1A"),
+  queiescence = c("TNC"),
+  EMT = c("SNAI1", "TGFBeta")
 )
+
+get_marker_exprs <- function(marker_list,
+                             spe_object,
+                             assay_name = "exprs",
+                             coldata_cols = c(
+                               "sample_id",
+                               "patient",
+                               "surgery",
+                               "ROI",
+                               "main_anno_v2",
+                               "manual_gating",
+                               "delaunay_cn_clusters" 
+                             )) {
+  if (!assay_name %in% assayNames(spe_object)) {
+    stop("The assay_name must be a valid assay in the spe_object.")
+  }
+
+  if (is.null(names(marker_list)) || any(names(marker_list) == "")) {
+    stop("marker_list must be a named list with cell state names.")
+  }
+
+  cell_metadata <- colData(spe_object)[, coldata_cols, drop = FALSE] %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column(var = "cell_id")
+
+  out <- vector("list", length(marker_list))
+  names(out) <- names(marker_list)
+
+  for (i in seq_along(marker_list)) {
+    missing_markers <- which(!marker_list[[i]] %in% rownames(spe_object@assays@data[[assay_name]]))
+
+    if (length(missing_markers) > 0) {
+      warning(
+        paste(
+          "Markers not found for", names(marker_list)[[i]], ":",
+          paste(missing_markers, collapse = ", ")
+        )
+      )
+    }
+
+    marker_exprs <- rowSums(t(spe_object@assays@data[[assay_name]][marker_list[[i]], , drop = FALSE]))
+
+    if (all(names(marker_exprs) == cell_metadata$cell_id)) {
+      out[[i]] <- data.frame(marker_exprs, stringsAsFactors = FALSE)
+      colnames(out[[i]]) <- names(marker_list)[[i]]
+    } else {
+      stop("Mismatching expression and coldata cell IDs")
+    }
+  }
+
+  out <- bind_cols(cell_metadata[, coldata_cols, drop = FALSE], out)
+
+  return(out)
+}
+
+cell_states <- get_marker_exprs(state_markers, lab_spe)
+cell_states <- cell_states[cell_states$main_anno_v2 == "Cancer", ]
+cell_states$manual_gating <- droplevels(cell_states$manual_gating)
+# cell_states <- cell_states %>%
+#     mutate(across(c("proliferative","hypoxia", "queiescence", "EMT"), ~scale(.)))
+
+compare_props <- function(df,
+                          response_var,
+                          comp_var,
+                          facet_groups = "manual_gating",
+                          stat = c("wilcox", "t"),
+                          paired_test = FALSE,
+                          p_adjust_method = "fdr",
+                          signif_on = c("p_adj", "p"),
+                          stat_y_pos_multiplier = 1) {
+  df_name <- deparse(substitute(df))
+  stat_used <- match.arg(stat, several.ok = FALSE)
+  paired_out <- ifelse(paired_test, "(Paired)", "")
+  comp_formula <- reformulate(response = "response", termlabels = "comps")
+
+  long_data <- df %>%
+    dplyr::select(
+      comps = !!sym(comp_var),
+      label = !!sym(facet_groups),
+      response = !!sym(response_var)
+    ) %>%
+    dplyr::mutate(across(comps, ~ factor(., levels = c("Prim", "Rec")))) %>%
+    dplyr::group_by(label)
+
+  df_grouped_by <- as.character(dplyr::groups(long_data))
+
+  # print message start ----
+  cli::cli_div(theme = list(span.emph = list(color = "orange")))
+  cli::cli_div(theme = list(span.strong = list(color = "darkred")))
+  cli::cli_h1("Comparison Summary")
+  cli::cli_text("")
+  cli::cli_alert_info("{.strong DATA:} {.emph {df_name}}")
+  cli::cli_alert_info("{.strong STAT:} {.emph {stat_used}{paired_out}, p.adjust = '{p_adjust_method}'}")
+  cli::cli_alert_info("{.strong FORMULA:} {.emph {response_var} ~ {comp_var}}")
+  cli::cli_alert_info("{.strong GROUP(S):} {.emph '{facet_groups}' ({dplyr::n_groups(long_data)})}")
+  cli::cli_h1("")
+  # print message end ----
+
+  stat_test <- switch(stat_used,
+    wilcox = rstatix::wilcox_test(
+      data = long_data,
+      formula = comp_formula,
+      paired = paired_test,
+      p.adjust.method = "none"
+    ),
+    t = rstatix::t_test(
+      data = long_data,
+      formula = comp_formula,
+      paired = paired_test,
+      p.adjust.method = "none"
+    )
+  )
+
+  stat_test <- stat_test %>%
+    rstatix::adjust_pvalue(
+      output.col = "p_adj",
+      method = p_adjust_method
+    ) %>%
+    rstatix::add_significance(
+      p.col = signif_on,
+      output.col = "p_signif"
+    ) %>%
+    rstatix::add_xy_position() %>%
+    dplyr::mutate(
+      method = stat_used,
+      paired_test = paired_test,
+      p_adj_method = p_adjust_method,
+      dataset = df_name,
+      cell_state = response_var,
+      across(
+        p_signif,
+        ~ ifelse(. == "ns", glue::glue("{signif_on} = {round(stat_test[[signif_on]], 3)}"), .)
+      )
+    ) %>%
+    dplyr::relocate(dataset)
+
+  outliers <- df[[response_var]] %>% boxplot.stats()
+
+  if (length(outliers$out) == 0) {
+    stat_test %>% dplyr::mutate(y.position = max(stat_test$y.position))
+  } else {
+    stat_test %>% dplyr::mutate(y.position = min(outliers$out) * stat_y_pos_multiplier)
+  }
+
+  stat_test[["comps"]] <- factor(stat_test$group1, levels = levels(long_data[["comps"]]))
+
+
+  return(
+    list(
+      data = long_data,
+      stats = stat_test
+    )
+  )
+}
+
+comps <- map(names(state_markers), ~ {
+  compare_props(
+    df = cell_states,
+    response_var = .x,
+    comp_var = "surgery",
+    # facet_groups = "manual_gating",
+    facet_groups = "patient",
+    signif_on = "p"
+  )
+})
+names(comps) <- names(state_markers)
+
+create_plot <- function(label_data, label_stats, label_name,
+                        y_lim_breaks = NULL,
+                        y_lim_min = NULL,
+                        y_lim_max = NULL) {
+    
+  ggplot(label_data, aes(x = comps, y = response, fill = comps)) +
+    geom_boxplot() +
+    scale_fill_manual(values = plot_colours$surgery) +
+    ylab("Cell State Protein Marker(s) Abundance") +
+    ggtitle(label_name) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    theme(
+      axis.text.x = element_blank(),
+      axis.title.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      plot.title = element_text(size = 25, face = "bold", hjust = 0.5)
+    ) +
+    ggpubr::stat_pvalue_manual(
+      data = label_stats,
+      label = "p_signif",
+      xmin = "xmin",
+      xmax = "xmax",
+      y.position = "y.position",
+      tip.length = 0,
+      size = 7,
+      fontface = "italic"
+    ) +
+    ggplot2::scale_y_continuous(
+      breaks = y_lim_breaks,
+      limits = c(y_lim_min, y_lim_max),
+      expand = ggplot2::expansion(mult = c(0.1, 0.1))
+    )
+}
+
+comp_patchwork <- function(comp_list,
+                           patchwork_title = "Title",
+                           facet_axes = "keep",
+                           ncols = 2, nrows = NULL) {
+    
+  facets <- unique(levels(comp_list$data$label))
+  if (is.null(facets)) facets <- unique(comp_list$data$label)
+
+  y_min <- floor(min(comp_list$data$response))
+  y_max <- ceiling(max(comp_list$data$response))
+  y_breaks <- seq(y_min, y_max, by = 1)
+  
+  comp_list$stats$y.position <- y_max
+  
+  
+  plots <- purrr::map(facets, ~ {
+    label_data <- comp_list$data[comp_list$data$label == .x, ]
+    label_stats <- comp_list$stats[comp_list$stats$label == .x, ]
+
+    create_plot(label_data, label_stats, .x,
+      y_lim_breaks =  y_breaks,
+      y_lim_min = y_min,
+      y_lim_max = y_max
+    )
+  })
+
+  if (tolower(patchwork_title) != "emt") {
+    patchwork_title <- tools::toTitleCase(patchwork_title)
+  }
+
+  patchwork::wrap_plots(plots, ncol = ncols, nrow = nrows) +
+    patchwork::plot_layout(
+      guides = "collect",
+      axis_titles = "collect",
+      axes = facet_axes,
+    ) +
+    patchwork::plot_annotation(subtitle = patchwork_title) &
+    ggplot2::theme(
+      legend.position = "bottom",
+      plot.subtitle = ggplot2::element_text(
+        size = 50,
+        face = "bold",
+        hjust = 0.5
+      )
+    )
+}
+
+outplot <- imap(comps, ~ comp_patchwork(.x, .y, ncols = 5))
+
+iwalk(outplot, ~ {
+  svglite::svglite(
+    filename = nf(glue::glue("{.y}_surgery_cancer_cells.svg"), io$outputs$out_dir),
+    width = 20,
+    height = 8
+  )
+  print(.x)
+  dev.off()
+})
+
+
 
 classify_cell_states <- function(marker_list,
                                  expression_matrix,
@@ -1651,8 +1909,8 @@ plot_cn_pheno <- function(spe_obj,
                           surgery_col = "surgery",
                           surgery_colors = spe_obj@metadata$v2_colours$dataset_pheno,
                           point_size = 10,
-                          point_shape=21, 
-                          point_color="black",
+                          point_shape = 21,
+                          point_color = "black",
                           point_alpha = 1,
                           line_color = "grey",
                           line_type = 2,
@@ -1661,53 +1919,51 @@ plot_cn_pheno <- function(spe_obj,
                           y_lab = "Cellular Neighborhood Proportions",
                           panel_background_color = "grey99",
                           cn_label_size = 40,
-                          base_text_size = 30
-) {
-    if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
-    if (!surgery_col %in% names(colData(spe_obj))) stop("surgery col not found in colData(spe_obj)")
-    
-    
-    cn_prop <- as.data.frame(colData(spe_obj))[, c(cn_label, surgery_col)]
-    
-    surgery_totals <- cn_prop %>%
-        dplyr::group_by(!!sym(surgery_col)) %>%
-        dplyr::summarise(surgery_total = n(), .groups = "drop") 
-    
-    cn_surgery_props <- cn_prop %>%
-        dplyr::select(
-            surgery = !!sym(surgery_col),
-            cn = !!sym(cn_label)
-        ) %>%
-        dplyr::group_by(surgery, cn) %>%
-        dplyr::summarise(freq = n(), .groups = "drop") %>%
-        dplyr::left_join(y = surgery_totals, by = surgery_col, relationship = "many-to-one") %>%
-        dplyr::mutate(
-            cn_prop = freq / surgery_total
-        )
-    
-    cn_surgery_props %>%
-        ggplot(aes(x = surgery, y = cn_prop, fill = surgery, group = cn)) +
-        geom_line(color= line_color, linetype = line_type, linewidth = line_width) +
-        geom_point(shape=point_shape, color=point_color, size=point_size, alpha = point_alpha) +
-        facet_wrap(~cn) +
-        labs(x = "", y = y_lab) +
-        scale_fill_manual(values = surgery_colors) +
-        scale_y_continuous(
-            labels = scales::percent_format(accuracy = 1),limits = c(0,y_max_lim)
-        ) + 
-        IMCfuncs::facetted_cell_prop_theme(
-            text_size = base_text_size,
-            facet_stip_text_size = cn_label_size,
-            panel_background = panel_background_color 
-        ) +
-        theme(
-            axis.text.y = element_text(
-                margin = margin(t = 0, r = 0, l = 5, b = 0, unit = "mm")
-            ),
-            axis.text.x = element_blank(),
-            axis.ticks.x = element_blank()
-        )
-    
+                          base_text_size = 30) {
+  if (!cn_label %in% names(colData(spe_obj))) stop("cn_label not found in colData(spe_obj)")
+  if (!surgery_col %in% names(colData(spe_obj))) stop("surgery col not found in colData(spe_obj)")
+
+
+  cn_prop <- as.data.frame(colData(spe_obj))[, c(cn_label, surgery_col)]
+
+  surgery_totals <- cn_prop %>%
+    dplyr::group_by(!!sym(surgery_col)) %>%
+    dplyr::summarise(surgery_total = n(), .groups = "drop")
+
+  cn_surgery_props <- cn_prop %>%
+    dplyr::select(
+      surgery = !!sym(surgery_col),
+      cn = !!sym(cn_label)
+    ) %>%
+    dplyr::group_by(surgery, cn) %>%
+    dplyr::summarise(freq = n(), .groups = "drop") %>%
+    dplyr::left_join(y = surgery_totals, by = surgery_col, relationship = "many-to-one") %>%
+    dplyr::mutate(
+      cn_prop = freq / surgery_total
+    )
+
+  cn_surgery_props %>%
+    ggplot(aes(x = surgery, y = cn_prop, fill = surgery, group = cn)) +
+    geom_line(color = line_color, linetype = line_type, linewidth = line_width) +
+    geom_point(shape = point_shape, color = point_color, size = point_size, alpha = point_alpha) +
+    facet_wrap(~cn) +
+    labs(x = "", y = y_lab) +
+    scale_fill_manual(values = surgery_colors) +
+    scale_y_continuous(
+      labels = scales::percent_format(accuracy = 1), limits = c(0, y_max_lim)
+    ) +
+    IMCfuncs::facetted_cell_prop_theme(
+      text_size = base_text_size,
+      facet_stip_text_size = cn_label_size,
+      panel_background = panel_background_color
+    ) +
+    theme(
+      axis.text.y = element_text(
+        margin = margin(t = 0, r = 0, l = 5, b = 0, unit = "mm")
+      ),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
 }
 
 svglite::svglite(
