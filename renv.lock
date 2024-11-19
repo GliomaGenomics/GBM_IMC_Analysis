@@ -1058,6 +1058,20 @@
       ],
       "Hash": "4f57884290cc75ab22f4af9e9d4ca862"
     },
+    "archive": {
+      "Package": "archive",
+      "Version": "1.1.9",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "cli",
+        "glue",
+        "rlang",
+        "tibble"
+      ],
+      "Hash": "d26b62e131d4a8b65aba4e9554a4bf74"
+    },
     "askpass": {
       "Package": "askpass",
       "Version": "1.2.0",
@@ -1442,6 +1456,24 @@
       ],
       "Hash": "f20c47fd52fae58b4e377c37bb8c335b"
     },
+    "colourpicker": {
+      "Package": "colourpicker",
+      "Version": "1.3.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "ggplot2",
+        "htmltools",
+        "htmlwidgets",
+        "jsonlite",
+        "miniUI",
+        "shiny",
+        "shinyjs",
+        "utils"
+      ],
+      "Hash": "daec8f7d4ba89df06fe2c0802c3a9dac"
+    },
     "commonmark": {
       "Package": "commonmark",
       "Version": "1.9.1",
@@ -1612,6 +1644,32 @@
         "viridis"
       ],
       "Hash": "292d9692737aeeb518307edc43621de9"
+    },
+    "cytoviewer": {
+      "Package": "cytoviewer",
+      "Version": "1.4.0",
+      "Source": "Bioconductor",
+      "Repository": "Bioconductor 3.19",
+      "Requirements": [
+        "EBImage",
+        "RColorBrewer",
+        "S4Vectors",
+        "SingleCellExperiment",
+        "SummarizedExperiment",
+        "archive",
+        "colourpicker",
+        "cytomapper",
+        "grDevices",
+        "methods",
+        "shiny",
+        "shinycssloaders",
+        "shinydashboard",
+        "svgPanZoom",
+        "svglite",
+        "utils",
+        "viridis"
+      ],
+      "Hash": "df0f02783e68c63fa68913e731296896"
     },
     "data.table": {
       "Package": "data.table",
@@ -2904,6 +2962,18 @@
       ],
       "Hash": "18e9c28c1d3ca1560ce30658b22ce104"
     },
+    "miniUI": {
+      "Package": "miniUI",
+      "Version": "0.1.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "htmltools",
+        "shiny",
+        "utils"
+      ],
+      "Hash": "fec5f52652d60615fdb3957b3d74324a"
+    },
     "minqa": {
       "Package": "minqa",
       "Version": "1.2.7",
@@ -3806,6 +3876,21 @@
       ],
       "Hash": "54b26646816af9960a4c64d8ceec75d6"
     },
+    "shinycssloaders": {
+      "Package": "shinycssloaders",
+      "Version": "1.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "digest",
+        "glue",
+        "grDevices",
+        "htmltools",
+        "shiny"
+      ],
+      "Hash": "2b45a467a30d6a88a1892a738c0900cf"
+    },
     "shinydashboard": {
       "Package": "shinydashboard",
       "Version": "0.7.2",
@@ -3819,6 +3904,19 @@
         "utils"
       ],
       "Hash": "e418b532e9bb4eb22a714b9a9f1acee7"
+    },
+    "shinyjs": {
+      "Package": "shinyjs",
+      "Version": "2.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "digest",
+        "jsonlite",
+        "shiny"
+      ],
+      "Hash": "802e4786b353a4bb27116957558548d5"
     },
     "sitmo": {
       "Package": "sitmo",

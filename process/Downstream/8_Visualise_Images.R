@@ -90,7 +90,7 @@ masks <- readRDS(io$inputs$masks)
 names(masks) <- str_extract(names(masks), "(?i)[a-z0-9]+_[0-9]+")
 masks@elementMetadata$sample_id <- str_extract(masks@elementMetadata$sample_id, "(?i)[a-z0-9]+_[0-9]+")
 
-# spe <- readRDS(io$inputs$spe_data)
+spe <- readRDS(io$inputs$spe_data)
 
 lab_spe <- readRDS(io$inputs$lab_spe_data)
 lab_spe <- lab_spe[channelNames(images), ]
