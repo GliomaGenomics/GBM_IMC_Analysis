@@ -40,37 +40,30 @@ ndirs(io$outputs)
 # create time-stamped output directory
 io$outputs$temp_out <- nd(path = io$outputs$out_dir)
 
-# obtain the most-recent data from a time-stamped directory
+# obtain the most-recent time-stamped data
 find_file <- function(dir_path,
                       file_pattern,
-                      dir_pattern = "^[T0-9-]+$",
-                      dir_select = c("recent", "oldest")) {
+                      file_select = c("recent", "oldest")) {
   if (missing(dir_path)) stop("No directory path provided")
   if (missing(file_pattern)) stop("No file pattern provided")
 
-  dirs_found <- list.files(dir_path, pattern = dir_pattern)
+  file_found <- fs::dir_info(
+    path = dir_path, recurse = TRUE, type = "file", regexp = file_pattern
+  )$path
 
-  if (length(dirs_found) == 0) stop("No directories found")
+  if (length(file_found) == 0) stop("No files found")
 
-  dir_selected <- switch(match.arg(dir_select, several.ok = FALSE),
-    recent = dirs_found[order(dirs_found, decreasing = TRUE)][[1]],
-    oldest = dirs_found[order(dirs_found, decreasing = FALSE)][[1]]
-  )
-
-  file_found <- list.files(
-    path = file.path(dir_path, dir_selected),
-    pattern = file_pattern,
-    ignore.case = TRUE,
-    recursive = FALSE,
-    full.names = TRUE
-  )
-
-  if (length(file_found) == 0) {
-    stop("No files found")
-  } else if (length(file_found) > 1) {
-    stop("Multiple files found")
-  } else {
+  if (length(file_found) == 1) {
     return(file_found)
+  }
+
+  if (length(file_found) > 1) {
+    file_selected <- switch(match.arg(file_select, several.ok = FALSE, choices = c("recent", "oldest")),
+      recent = file_found[order(file_found, decreasing = TRUE)][[1]],
+      oldest = file_found[order(file_found, decreasing = FALSE)][[1]]
+    )
+
+    return(file_selected)
   }
 }
 
@@ -705,6 +698,51 @@ rm(
   prop_comps, prop_plots, labelled_props,
   current_spe, prev_region_labs, region_main_outdir, region_main_anno_plot
 )
+
+# QUANTIFY THE INTER AND INTRA-TUMOUR HETEROGENEITY ----------------------------
+
+region_hetero <- prev_region_labs %>%
+  tidyr::unnest_longer(col = main_anno, values_to = "count") %>%
+  tidyr::unnest_wider(count) %>%
+  dplyr::select(
+    sample_id, patient, surgery, ROI, labelled, label, freq, prop
+  ) %>%
+  tidyr::unite(patient_surgery, c(patient, surgery), sep = "_")
+
+
+anova_data <- region_hetero %>%
+  select(patient_surgery, ROI, label, prop)
+
+anova_results_list <- list()
+
+for (cell_type in unique(anova_data$label)) {
+  print(paste("ANOVA for:", cell_type))
+
+  # Filter data for the specific cell type
+  cell_data <- anova_data %>% filter(label == cell_type)
+
+  # Perform ANOVA
+  anova_result <- aov(prop ~ patient_surgery + ROI, data = cell_data)
+  anova_df <- broom::tidy(anova_result)
+
+  # Add a column for the cell type for identification
+  anova_df$cell_type <- cell_type
+
+  # Add this data frame to the list
+  anova_results_list[[cell_type]] <- anova_df
+}
+
+# Combine all data frames into one
+anova_results_list <- bind_rows(anova_results_list)
+
+anova_results_list$p.signif <- format_p_vals(anova_results_list$p.value, decimal_places = 4)
+
+openxlsx::write.xlsx(
+  anova_results_list,
+  asTable = TRUE,
+  file = nf("ROI_heterogeneity_anova_results.xlsx", io$output$temp_out)
+)
+
 # QUANTIFY LABELLED CELL PROPORTIONS -------------------------------------------
 add_proportions <- function(x) {
   x %>%
