@@ -54,8 +54,9 @@ get_state_interactions <- function(spe_obj, state) {
     dplyr::summarize(
       sum_sigval = sum(sigval, na.rm = TRUE),
       pct_sigval = abs(sum_sigval) / n() * 100,
+      min_pval = min(p, na.rm = TRUE),
       type = ifelse(sum_sigval == 0, NA, ifelse(sum_sigval > 0, "Interacting", "Avoiding")),
-      .groups = "keep"
+      .groups = "drop"
     ) %>%
     dplyr::ungroup() %>%
     dplyr::mutate(
@@ -113,12 +114,13 @@ delta_surgery_interactions <- function(ia_df,
   surgery_split <- lapply(surgery_split, \(x) .clean_ia_data(ia_df = x, min_patients = patient_min))
 
   delta <- surgery_split$Rec$plot_df %>%
-    select(from_label, to_label, rec_type = type)
+    select(from_label, to_label, rec_type = type, rec_min_p = min_pval)
 
   delta <- surgery_split$Prim$plot_df %>%
     select(from_label, to_label,
       prim_sum_sigval = sum_sigval,
       prim_pct_sigval = pct_sigval,
+      prim_min_p = min_pval,
       min_patient_filtered,
       min_patients,
       prim_type = type

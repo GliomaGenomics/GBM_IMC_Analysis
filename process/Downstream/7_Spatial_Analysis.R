@@ -311,12 +311,24 @@ comps <- map(names(state_markers), ~ {
     df = cell_states,
     response_var = .x,
     comp_var = "surgery",
-    # facet_groups = "manual_gating",
-    facet_groups = "patient",
+    facet_groups = "manual_gating",
+    # facet_groups = "patient",
     signif_on = "p"
   )
 })
 names(comps) <- names(state_markers)
+
+
+cell_state_stats <- purrr::map(comps, ~ .x$stats) %>% bind_rows()
+
+openxlsx::write.xlsx(
+  x = cell_state_stats,
+  file = nf(glue::glue("malignant_cell_states.xlsx"), io$outputs$out_dir),
+  asTable = TRUE
+)
+
+
+
 
 create_plot <- function(label_data, label_stats, label_name,
                         y_lim_breaks = NULL,
@@ -469,13 +481,13 @@ global_cn_states <- function(cell_state_df, state, cn_cluster_col = "delaunay_cn
 
 
 walk(names(state_markers), ~ {
-    svglite::svglite(
-        filename = nf(glue::glue("{.x}_global_cn_cell_states.png"), io$outputs$out_dir),
-        width = 10,
-        height = 10
-    )
-    print(global_cn_states(cell_states, .x))
-    dev.off()
+  svglite::svglite(
+    filename = nf(glue::glue("{.x}_global_cn_cell_states.png"), io$outputs$out_dir),
+    width = 10,
+    height = 10
+  )
+  print(global_cn_states(cell_states, .x))
+  dev.off()
 })
 
 
@@ -548,19 +560,19 @@ surgery_cn_states <- function(cell_state_df, state,
       plot.title = element_text(hjust = 0.5, size = 35),
       axis.title.x = element_text(
         size = 40,
-          margin = margin(t = 5, r = 0, l = 0, b = 0, unit = "mm")
+        margin = margin(t = 5, r = 0, l = 0, b = 0, unit = "mm")
       )
     )
 }
 
 walk(names(state_markers), ~ {
-    svglite::svglite(
-        filename = nf(glue::glue("{.x}_surgery_cn_states.svg"), io$outputs$out_dir),
-        width = 12,
-        height = 22
-    )
-    print(surgery_cn_states(cell_states, .x))
-    dev.off()
+  svglite::svglite(
+    filename = nf(glue::glue("{.x}_surgery_cn_states.svg"), io$outputs$out_dir),
+    width = 12,
+    height = 22
+  )
+  print(surgery_cn_states(cell_states, .x))
+  dev.off()
 })
 
 
@@ -2538,7 +2550,6 @@ io$outputs$temp_ia <- nd(
 )
 
 library(scales)
-
 source("process/Downstream/functions/cell_Interaction_funcs.R", local = TRUE)
 
 # Test cell interactions across patient/surgery groups
