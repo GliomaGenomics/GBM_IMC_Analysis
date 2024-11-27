@@ -137,22 +137,75 @@ signif_patients <- function(interact_df = interactions,
   }
 }
 
+plot_cell_objects <- function(cur_id,
+                              cell_types,
+                              colour_by = "manual_gating",
+                              cell_colours = lab_spe@metadata$v2_colours$cells,
+                              all_masks = masks, 
+                              all_objects = lab_spe,
+                              bkg_color = "grey98",
+                              unlabelled_color = "grey93",
+                              # bkg_color = "black",
+                              # unlabelled_color = "grey20",
+                              out_dir = io$output$temp_out
+){
+    
+    cur_masks <- all_masks[names(all_masks) %in% cur_id]
+    cur_colors <- cell_colours[cell_types]
+    
+    filt_spe <- all_objects[, all_objects[[colour_by]] %in% cell_types]
+    filt_spe$outline_col <- filt_spe[[colour_by]]
+    
+    out_filename <- paste0(unique(str_extract(cur_id, "(?i)^[a-z0-9]+")), ".png")
+    
+    # plotting the cell masks coloured by specific cells
+    plotCells(mask = cur_masks,
+              object = filt_spe,
+              cell_id = "cell_id",
+              img_id = "sample_id",
+              outline_by = "outline_col",
+              colour_by = colour_by,
+              background_colour = bkg_color,
+              missing_colour = unlabelled_color,
+              colour = list(
+                  manual_gating = cur_colors
+              ),
+              display = "single",
+              image_title = NULL,
+              scale_bar = NULL,
+              thick = FALSE,
+              save_plot = list(
+                  filename = nf(
+                      filename = out_filename,
+                      filepath = out_dir
+                  ),
+                  scale = 3
+              )
+    )
+    
+}
+
 # 1. ENDOTHELIAL CELLS INTERACTIONS --------------------------------------------
 signif_patients(
   surgery_filt = "Prim",
   from_cell = "Endothelial",
   to_cell = c("Microglia", "MES")
 )
-cur_id <- grep("^71Prim", names(images), value = TRUE)
-cell_types <- c("Endothelial", "Microglia", "MES")
 
+plot_cell_objects(
+    cur_id = grep("^71Prim", names(images), value = TRUE),
+    cell_types = c("Endothelial", "Microglia", "MES")
+  )
 
 signif_patients(
   from_cell = "Endothelial",
   to_cell = c("Macrophage")
 )
-cur_id <- grep("^71Rec", names(images), value = TRUE)
-cell_types <- c("Endothelial", "Macrophage")
+
+plot_cell_objects(
+    cur_id = grep("^71Rec", names(images), value = TRUE),
+    cell_types = c("Endothelial", "Macrophage")
+)
 
 # 2. OLIGODENDROCYTES INTERACTIONS ---------------------------------------------
 signif_patients(
@@ -161,8 +214,10 @@ signif_patients(
   to_cell = c("MES")
 )
 
-cur_id <- grep("^64Prim", names(images), value = TRUE)
-cell_types <- c("Oligodendrocyte", "MES")
+plot_cell_objects(
+    cur_id = grep("^64Prim", names(images), value = TRUE),
+    cell_types = c("Oligodendrocyte", "MES")
+)
 
 signif_patients(
   surgery_filt = "Rec",
@@ -170,9 +225,10 @@ signif_patients(
   to_cell = c("T cell", "Microglia", "Endothelial")
 )
 
-cur_id <- grep("^64Rec", names(images), value = TRUE)
-cell_types <- c("Oligodendrocyte", "T cell", "Microglia", "Endothelial")
-
+plot_cell_objects(
+    cur_id = grep("^64Rec", names(images), value = TRUE),
+    cell_types = c("Oligodendrocyte", "T cell", "Microglia", "Endothelial")
+)
 
 # 3. ASTROCYTE INTERACTIONS ----------------------------------------------------
 signif_patients(
@@ -181,10 +237,10 @@ signif_patients(
   to_cell = c("Microglia", "Macrophage")
 )
 
-cur_id <- grep("^84Prim", names(images), value = TRUE)
-cell_types <- c("Astrocyte", "Microglia", "Macrophage")
-
-
+plot_cell_objects(
+    cur_id = grep("^84Prim", names(images), value = TRUE),
+    cell_types = c("Astrocyte", "Microglia", "Macrophage")
+)
 
 signif_patients(
   surgery_filt = "Rec",
@@ -192,8 +248,10 @@ signif_patients(
   to_cell = c("OPC", "NPC")
 )
 
-cur_id <- grep("^71Rec", names(images), value = TRUE)
-cell_types <- c("Astrocyte", "OPC", "NPC")
+plot_cell_objects(
+    cur_id = grep("^71Rec", names(images), value = TRUE),
+    cell_types = c("Astrocyte", "OPC", "NPC")
+)
 
 # 4. NEURON INTERACTIONS -------------------------------------------------------
 signif_patients(
@@ -202,9 +260,10 @@ signif_patients(
   to_cell = c("Macrophage")
 )
 
-cur_id <- grep("^82Prim", names(images), value = TRUE)
-cell_types <- c("Neuron", "Macrophage")
-
+plot_cell_objects(
+    cur_id = grep("^82Prim", names(images), value = TRUE),
+    cell_types = c("Neuron", "Macrophage")
+)
 
 signif_patients(
   surgery_filt = "Rec",
@@ -212,48 +271,16 @@ signif_patients(
   to_cell = c("Astrocyte", "MES")
 )
 
-cur_id <- grep("^82Rec", names(images), value = TRUE)
-cell_types <- c("Neuron", "Astrocyte", "MES")
-# CELL VISUALSATION ------------------------------------------------------------
-# c(
-#   "T cell", "NK cell", "Macrophage", "Microglia", "AC", "MES", "NPC", "OPC",
-#   "Neuron", "Astrocyte", "Oligodendrocyte", "Endothelial"
-# )
-
-cur_images <- images[names(images) %in% cur_id]
-cur_masks <- masks[names(masks) %in% cur_id]
-
-cell_colours <- c("#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00")
-names(cell_colours) <- cell_types
-
-filt_spe <- lab_spe[, lab_spe$manual_gating %in% cell_types]
-filt_spe$outline_col <- filt_spe$manual_gating
-
-# plotting the cell masks coloured by specific cells
-plotCells(cur_masks,
-  object = filt_spe,
-  cell_id = "cell_id",
-  img_id = "sample_id",
-  outline_by = "outline_col",
-  colour_by = "manual_gating",
-  background_colour = "black",
-  missing_colour = "grey20",
-  colour = list(
-    manual_gating = cell_colours
-  ),
-  display = "single",
-  image_title = NULL,
-  scale_bar = NULL,
-  thick = FALSE,
-  save_plot = list(
-    filename = nf(
-      filename = paste0(unique(str_extract(cur_id, "(?i)^[a-z0-9]+")), ".png"),
-      filepath = io$output$temp_out
-    ),
-    # filename = nf(glue::glue("{cur_id}.png"), io$output$temp_out),
-    scale = 3
-  )
+plot_cell_objects(
+    cur_id = grep("^82Rec", names(images), value = TRUE),
+    cell_types = c("Neuron", "Astrocyte", "MES")
+ 
 )
+
+# CELL VISUALSATION ------------------------------------------------------------
+# cell_colours <- c("#FF0000", "#00FF00", "#0000FF", "#00FFFF", "#FF00FF", "#FFFF00")
+# names(cell_colours) <- cell_types
+
 # image_title  = list(
 #     text = mcols(cur_images)$sample_id,
 #     colour = "white",
