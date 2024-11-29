@@ -2176,26 +2176,29 @@ lab_spe <- detectSpatialContext(
 )
 
 # determine a minimum cell threshold to filter the spatial contexts
+# This is not really having any effect when used in combination with the
+# minimum patients filter so will no longer be applied.
 cell_threshold <- colData(lab_spe)[, c("patient", "surgery", "ROI")] %>%
   as.data.frame() %>%
   group_by_all() %>%
   dplyr::count() %>%
   dplyr::group_by(surgery) %>%
-  dplyr::summarise(min_cells = round(mean(n) * 0.1))
+  dplyr::summarise(min_cells = round(median(n) * 0.05))
 
 cell_threshold <- setNames(cell_threshold$min_cells, cell_threshold$surgery)
 
 min_sc_patients <- 3
 
-# we will filter the spatial context to include only those contexts which are
-# present in at least three separate patients and contain more than
-# the minimum cell threshold determined for each surgery type.
+# we will filter the spatial context to include only the most dominant spatial
+# contexts, i.e., those which are present in at least three separate patients
+# and contain a minimum number of cells, determined individually for each
+# surgery type, due to the relative difference in cells across the surgeries.
 prim_filt_sc <- filterSpatialContext(
   object = lab_spe[, lab_spe$surgery == "Prim"],
   entry = "delaunay_sc",
   group_by = "patient",
   group_threshold = min_sc_patients,
-  cells_threshold = cell_threshold[["Prim"]],
+  # cells_threshold = cell_threshold[["Prim"]],
   name = "prim_delaunay_sc_filt"
 )
 
@@ -2204,7 +2207,7 @@ rec_filt_sc <- filterSpatialContext(
   entry = "delaunay_sc",
   group_by = "patient",
   group_threshold = min_sc_patients,
-  cells_threshold = cell_threshold[["Rec"]],
+  # cells_threshold = cell_threshold[["Rec"]],
   name = "rec_delaunay_sc_filt"
 )
 
@@ -2270,6 +2273,189 @@ sc_colors <- list(
     levels(rec_filt_sc$rec_delaunay_sc_filt)
   )
 )
+
+# SPATIAL CONTEXT ANALYSIS V2 --------------------------------------------------
+cn_map <- readRDS("outputs/spatial_analysis/cn_map_2024-11-29T16-47-01.rds")
+
+surgery_sc_graph_data <- function(spe_obj = lab_spe, min_patients = 3){
+    
+    out <- list(
+        prim = list(),
+        rec = list()
+        )
+    
+    cell_thresholds <- colData(spe_obj)[, c("patient", "surgery", "ROI")] %>%
+        as.data.frame() %>%
+        group_by_all() %>%
+        dplyr::count() %>%
+        dplyr::group_by(surgery) %>%
+        dplyr::summarise(min_cells = round(median(n) * 0.05))
+    
+    cell_thresholds <- setNames(cell_thresholds$min_cells, cell_thresholds$surgery)
+    
+    out$prim$cell_thresholds <- cell_thresholds[["Prim"]]
+    out$rec$cell_thresholds <- cell_thresholds[["Rec"]]
+    
+    out$prim$spe_obj <- filterSpatialContext(
+        object = spe_obj[,spe_obj$surgery == "Prim"],
+        entry = "delaunay_sc",
+        group_by = "patient",
+        group_threshold = min_patients,
+        cells_threshold = out$prim$cell_thresholds,
+        name = "prim_delaunay_sc_filt"
+    )
+    out$prim$graph_data <- plotSpatialContext(
+        object = out$prim$spe_obj,
+        entry = "prim_delaunay_sc_filt",
+        group_by = "sample_id",
+        edge_color_fix = "grey75",
+        node_label_color_fix = "black",
+        node_color_by = "name",
+        node_size_fix = "20",
+        return_data = TRUE
+    )
+    
+    out$rec$spe_obj <- filterSpatialContext(
+        object = lab_spe[,spe_obj$surgery == "Rec"],
+        entry = "delaunay_sc",
+        group_by = "patient",
+        group_threshold = min_patients,
+        cells_threshold = out$rec$cell_thresholds,
+        name = "rec_delaunay_sc_filt"
+    )
+    
+    out$rec$graph_data <- plotSpatialContext(
+        object = out$rec$spe_obj,
+        entry = "rec_delaunay_sc_filt",
+        group_by = "sample_id",
+        edge_color_fix = "grey75",
+        node_label_color_fix = "black",
+        node_color_by = "name",
+        node_size_fix = "20",
+        return_data = TRUE
+    )
+   
+    return(out)
+    
+}
+
+graph_data <- surgery_sc_graph_data()
+
+# Function to extract unique neighbourhood connections
+extract_neighborhood_connections <- function(from, to) {
+  from_set <- unlist(strsplit(from, "_"))
+  to_set <- unlist(strsplit(to, "_"))
+
+  # Generate all unique pairs of from and to neighborhoods
+  unique_pairs <- expand.grid(from_set, to_set, stringsAsFactors = FALSE)
+  colnames(unique_pairs) <- c("from", "to")
+
+  # Return unique connections
+  return(unique_pairs)
+}
+
+# get unique neighbourhood connections and relabel the CNs
+graph_data <- map(graph_data, ~{
+    
+    surgery_edges <- pluck(.x, "graph_data", "edges")
+    
+    unique_neighborhood_edges <- lapply(1:nrow(surgery_edges), function(i){
+        from <- surgery_edges$from[i]
+        to <- surgery_edges$to[i]
+        extract_neighborhood_connections(from, to)
+    })
+    
+    .$unique_neighborhood_edges <- unique_neighborhood_edges %>% 
+        dplyr::bind_rows() %>%
+        dplyr::filter(from != to) %>%
+        dplyr::distinct()
+    
+    # Relabel 'from' and 'to' columns
+    .$unique_neighborhood_edges$from <- cn_map$label_map[as.character(.$unique_neighborhood_edges$from )]
+    .$unique_neighborhood_edges$to <- cn_map$label_map[as.character(.$unique_neighborhood_edges$to)]
+    
+    .$unique_neighborhood_edges <- .$unique_neighborhood_edges %>%
+        dplyr::filter(from != to) %>%
+        dplyr::distinct()
+    
+    return(.)
+    
+})
+
+# Create an igraph object
+graph_data <- map(graph_data, ~{
+    
+    .$graph_obj <- igraph::graph_from_data_frame(
+        d = .$unique_neighborhood_edges, directed = TRUE
+        )
+    
+    return(.)
+})
+
+# VISUALISE SPATIAL CONTEXT V2 -------------------------------------------------
+i = 1
+y_scaling = 0.25
+
+if(names(graph_data)[i] == "prim") x_scaling = 0.1 else x_scaling = 0.5
+if(names(graph_data)[i] == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"    
+
+node_positions <- cn_map$node_info %>%
+    dplyr::filter(name %in% igraph::V(graph_data[[i]]$graph_obj)$name) %>%
+    group_by(layer) %>%
+    dplyr::mutate(
+        x = cur_group_id(),
+        y = row_number()
+        ) %>%
+    ungroup()
+
+out = ggraph(graph_data[[i]]$graph_obj, layout = node_positions) +
+  geom_edge_link(color = "gray50", edge_width = 2) +
+  geom_node_label(aes(label = name),
+    alpha = 0.95,
+    fill = node_positions$layer_colour,
+    color = node_positions$layer_text_colour,
+    size = 12,
+    fontface = "bold",
+    label.padding = unit(0.5, "lines"),
+    label.size = 1, 
+    label.r = unit(0.5, "lines"),
+    show.legend = FALSE
+  ) +
+  labs(
+    title = glue::glue("Spatial Context Interactions - {samples}"),
+    subtitle = glue::glue(
+        "n_patients: 3",
+        "n_SC cells: {graph_data[[i]]$cell_thresholds}",
+        .sep = "\n"
+        )
+  ) +
+  theme_void(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 0, size = 30, face = "bold"),
+    plot.subtitle = element_text(hjust = 0, size = 25, face = "italic")
+  ) +
+    coord_cartesian(xlim = c(0.75, max(node_positions$x) + x_scaling), 
+                    ylim = c(0.75, max(node_positions$y) + y_scaling))    
+
+
+svglite::svglite(
+  filename = nf("Prim_sample_SCs.svg", io$outputs$temp_sc),
+  width = 20,
+  height = 20
+)
+print(out)
+dev.off()
+
+
+svglite::svglite(
+  filename = nf("rec_sample_SCs.svg", io$outputs$temp_sc),
+  width = 20,
+  height = 20
+)
+print(out)
+dev.off()
 
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
 io$outputs$temp_sc <- nd(
@@ -2389,6 +2575,20 @@ plot_sc <- function(spe_obj,
     )
   )
 }
+
+
+plotSpatialContext(
+  object = prim_filt_sc,
+  entry = "prim_delaunay_sc_filt",
+  group_by = "sample_id",
+  edge_color_fix = "grey75",
+  node_label_color_fix = "black",
+  node_color_by = "name",
+  node_size_fix = "20",
+)
+
+
+
 
 sc_plots <- list(
   primary = plot_sc(
