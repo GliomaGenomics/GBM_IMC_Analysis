@@ -2277,66 +2277,64 @@ sc_colors <- list(
 # SPATIAL CONTEXT ANALYSIS V2 --------------------------------------------------
 cn_map <- readRDS("outputs/spatial_analysis/cn_map_2024-11-29T16-47-01.rds")
 
-surgery_sc_graph_data <- function(spe_obj = lab_spe, min_patients = 3){
-    
-    out <- list(
-        prim = list(),
-        rec = list()
-        )
-    
-    cell_thresholds <- colData(spe_obj)[, c("patient", "surgery", "ROI")] %>%
-        as.data.frame() %>%
-        group_by_all() %>%
-        dplyr::count() %>%
-        dplyr::group_by(surgery) %>%
-        dplyr::summarise(min_cells = round(median(n) * 0.05))
-    
-    cell_thresholds <- setNames(cell_thresholds$min_cells, cell_thresholds$surgery)
-    
-    out$prim$cell_thresholds <- cell_thresholds[["Prim"]]
-    out$rec$cell_thresholds <- cell_thresholds[["Rec"]]
-    
-    out$prim$spe_obj <- filterSpatialContext(
-        object = spe_obj[,spe_obj$surgery == "Prim"],
-        entry = "delaunay_sc",
-        group_by = "patient",
-        group_threshold = min_patients,
-        cells_threshold = out$prim$cell_thresholds,
-        name = "prim_delaunay_sc_filt"
-    )
-    out$prim$graph_data <- plotSpatialContext(
-        object = out$prim$spe_obj,
-        entry = "prim_delaunay_sc_filt",
-        group_by = "sample_id",
-        edge_color_fix = "grey75",
-        node_label_color_fix = "black",
-        node_color_by = "name",
-        node_size_fix = "20",
-        return_data = TRUE
-    )
-    
-    out$rec$spe_obj <- filterSpatialContext(
-        object = lab_spe[,spe_obj$surgery == "Rec"],
-        entry = "delaunay_sc",
-        group_by = "patient",
-        group_threshold = min_patients,
-        cells_threshold = out$rec$cell_thresholds,
-        name = "rec_delaunay_sc_filt"
-    )
-    
-    out$rec$graph_data <- plotSpatialContext(
-        object = out$rec$spe_obj,
-        entry = "rec_delaunay_sc_filt",
-        group_by = "sample_id",
-        edge_color_fix = "grey75",
-        node_label_color_fix = "black",
-        node_color_by = "name",
-        node_size_fix = "20",
-        return_data = TRUE
-    )
-   
-    return(out)
-    
+surgery_sc_graph_data <- function(spe_obj = lab_spe, min_patients = 3) {
+  out <- list(
+    prim = list(),
+    rec = list()
+  )
+
+  cell_thresholds <- colData(spe_obj)[, c("patient", "surgery", "ROI")] %>%
+    as.data.frame() %>%
+    group_by_all() %>%
+    dplyr::count() %>%
+    dplyr::group_by(surgery) %>%
+    dplyr::summarise(min_cells = round(median(n) * 0.05))
+
+  cell_thresholds <- setNames(cell_thresholds$min_cells, cell_thresholds$surgery)
+
+  out$prim$cell_thresholds <- cell_thresholds[["Prim"]]
+  out$rec$cell_thresholds <- cell_thresholds[["Rec"]]
+
+  out$prim$spe_obj <- filterSpatialContext(
+    object = spe_obj[, spe_obj$surgery == "Prim"],
+    entry = "delaunay_sc",
+    group_by = "patient",
+    group_threshold = min_patients,
+    cells_threshold = out$prim$cell_thresholds,
+    name = "prim_delaunay_sc_filt"
+  )
+  out$prim$graph_data <- plotSpatialContext(
+    object = out$prim$spe_obj,
+    entry = "prim_delaunay_sc_filt",
+    group_by = "sample_id",
+    edge_color_fix = "grey75",
+    node_label_color_fix = "black",
+    node_color_by = "name",
+    node_size_fix = "20",
+    return_data = TRUE
+  )
+
+  out$rec$spe_obj <- filterSpatialContext(
+    object = lab_spe[, spe_obj$surgery == "Rec"],
+    entry = "delaunay_sc",
+    group_by = "patient",
+    group_threshold = min_patients,
+    cells_threshold = out$rec$cell_thresholds,
+    name = "rec_delaunay_sc_filt"
+  )
+
+  out$rec$graph_data <- plotSpatialContext(
+    object = out$rec$spe_obj,
+    entry = "rec_delaunay_sc_filt",
+    group_by = "sample_id",
+    edge_color_fix = "grey75",
+    node_label_color_fix = "black",
+    node_color_by = "name",
+    node_size_fix = "20",
+    return_data = TRUE
+  )
+
+  return(out)
 }
 
 graph_data <- surgery_sc_graph_data()
@@ -2355,89 +2353,102 @@ extract_neighborhood_connections <- function(from, to) {
 }
 
 # get unique neighbourhood connections and relabel the CNs
-graph_data <- map(graph_data, ~{
-    
-    surgery_edges <- pluck(.x, "graph_data", "edges")
-    
-    unique_neighborhood_edges <- lapply(1:nrow(surgery_edges), function(i){
-        from <- surgery_edges$from[i]
-        to <- surgery_edges$to[i]
-        extract_neighborhood_connections(from, to)
-    })
-    
-    .$unique_neighborhood_edges <- unique_neighborhood_edges %>% 
-        dplyr::bind_rows() %>%
-        dplyr::filter(from != to) %>%
-        dplyr::distinct()
-    
-    # Relabel 'from' and 'to' columns
-    .$unique_neighborhood_edges$from <- cn_map$label_map[as.character(.$unique_neighborhood_edges$from )]
-    .$unique_neighborhood_edges$to <- cn_map$label_map[as.character(.$unique_neighborhood_edges$to)]
-    
-    .$unique_neighborhood_edges <- .$unique_neighborhood_edges %>%
-        dplyr::filter(from != to) %>%
-        dplyr::distinct()
-    
-    return(.)
-    
+graph_data <- map(graph_data, ~ {
+  surgery_edges <- pluck(.x, "graph_data", "edges")
+
+  unique_neighborhood_edges <- lapply(1:nrow(surgery_edges), function(i) {
+    from <- surgery_edges$from[i]
+    to <- surgery_edges$to[i]
+    extract_neighborhood_connections(from, to)
+  })
+
+  .$unique_neighborhood_edges <- unique_neighborhood_edges %>%
+    dplyr::bind_rows() %>%
+    dplyr::filter(from != to) %>%
+    dplyr::distinct()
+
+  # Relabel 'from' and 'to' columns
+  .$unique_neighborhood_edges$from <- cn_map$label_map[as.character(.$unique_neighborhood_edges$from)]
+  .$unique_neighborhood_edges$to <- cn_map$label_map[as.character(.$unique_neighborhood_edges$to)]
+
+  .$unique_neighborhood_edges <- .$unique_neighborhood_edges %>%
+    dplyr::filter(from != to) %>%
+    dplyr::distinct()
+
+  return(.)
 })
 
 # Create an igraph object
-graph_data <- map(graph_data, ~{
-    
-    .$graph_obj <- igraph::graph_from_data_frame(
-        d = .$unique_neighborhood_edges, directed = TRUE
-        )
-    
-    return(.)
+graph_data <- map(graph_data, ~ {
+  .$graph_obj <- igraph::graph_from_data_frame(
+    d = .$unique_neighborhood_edges, directed = TRUE
+  )
+
+  return(.)
 })
 
 # VISUALISE SPATIAL CONTEXT V2 -------------------------------------------------
-i = 1
-y_scaling = 0.25
+plot_network_graphs <- function(graph_list, sample_surgery, cn_node_map) {
+  if (sample_surgery == "prim") x_scaling <- 0.1 else x_scaling <- 0.5
 
-if(names(graph_data)[i] == "prim") x_scaling = 0.1 else x_scaling = 0.5
-if(names(graph_data)[i] == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"    
+  y_scaling <- 0.25
 
-node_positions <- cn_map$node_info %>%
-    dplyr::filter(name %in% igraph::V(graph_data[[i]]$graph_obj)$name) %>%
+  if (sample_surgery == "prim") samples <- "Primary Samples" else samples <- "Recurrent Samples"
+
+  node_positions <- cn_node_map %>%
+    dplyr::filter(name %in% igraph::V(graph_list$graph_obj)$name) %>%
     group_by(layer) %>%
     dplyr::mutate(
-        x = cur_group_id(),
-        y = row_number()
-        ) %>%
+      x = cur_group_id(),
+      y = row_number()
+    ) %>%
     ungroup()
 
-out = ggraph(graph_data[[i]]$graph_obj, layout = node_positions) +
-  geom_edge_link(color = "gray50", edge_width = 2) +
-  geom_node_label(aes(label = name),
-    alpha = 0.95,
-    fill = node_positions$layer_colour,
-    color = node_positions$layer_text_colour,
-    size = 12,
-    fontface = "bold",
-    label.padding = unit(0.5, "lines"),
-    label.size = 1, 
-    label.r = unit(0.5, "lines"),
-    show.legend = FALSE
-  ) +
-  labs(
-    title = glue::glue("Spatial Context Interactions - {samples}"),
-    subtitle = glue::glue(
-        "n_patients: 3",
-        "n_SC cells: {graph_data[[i]]$cell_thresholds}",
-        .sep = "\n"
+  suppressWarnings({
+    out <- ggraph(graph_list$graph_obj, layout = node_positions) +
+      geom_edge_link(color = "gray50", edge_width = 2) +
+      geom_node_label(aes(label = name),
+        alpha = 0.95,
+        fill = node_positions$layer_colour,
+        color = node_positions$layer_text_colour,
+        size = 12,
+        fontface = "bold",
+        label.padding = unit(0.5, "lines"),
+        label.size = 1,
+        label.r = unit(0.5, "lines"),
+        show.legend = FALSE
+      ) +
+      labs(
+        title = glue::glue("Spatial Context Interactions - {samples}"),
+        subtitle = glue::glue(
+          "n_patients: 3",
+          "n_SC cells: {graph_list$cell_thresholds}",
+          .sep = "\n"
         )
-  ) +
-  theme_void(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    legend.title = element_blank(),
-    plot.title = element_text(hjust = 0, size = 30, face = "bold"),
-    plot.subtitle = element_text(hjust = 0, size = 25, face = "italic")
-  ) +
-    coord_cartesian(xlim = c(0.75, max(node_positions$x) + x_scaling), 
-                    ylim = c(0.75, max(node_positions$y) + y_scaling))    
+      ) +
+      theme_void(base_size = 12) +
+      theme(
+        legend.position = "bottom",
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0, size = 30, face = "bold"),
+        plot.subtitle = element_text(hjust = 0, size = 25, face = "italic")
+      ) +
+      coord_cartesian(
+        xlim = c(0.75, max(node_positions$x) + x_scaling),
+        ylim = c(0.75, max(node_positions$y) + y_scaling)
+      )
+  })
+
+  return(out)
+}
+
+network_graphs <- imap(
+  graph_data, ~ plot_network_graphs(
+    graph_list = .x,
+    sample_surgery = .y,
+    cn_node_map = cn_map$node_info
+  )
+)
 
 
 svglite::svglite(
@@ -2445,7 +2456,7 @@ svglite::svglite(
   width = 20,
   height = 20
 )
-print(out)
+print(network_graphs$prim)
 dev.off()
 
 
@@ -2454,106 +2465,107 @@ svglite::svglite(
   width = 20,
   height = 20
 )
-print(out)
+print(network_graphs$rec)
 dev.off()
 
 
 graph_measures <- function(graph_list, sample_surgery, cn_node_map) {
-    
-    if(sample_surgery == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"   
-    
-    ncell_df <- colData(graph_list$spe_obj)[, c("delaunay_cn_clusters"), drop = FALSE] %>%
-        as.data.frame() %>%
-        dplyr::rename(cn = delaunay_cn_clusters) %>%
-        dplyr::group_by(cn) %>%
-        dplyr::summarise(n_cells = n(), .groups = "drop") %>%
-        dplyr::mutate(name = cn_map$label_map[cn]) %>%
-        dplyr::group_by(name) %>%
-        dplyr::summarise(value = sum(n_cells), .groups = "drop") %>%
-        dplyr::mutate(measure = "nCells") %>%
-        dplyr::relocate(measure, .after = name)
-    
-    
-    ncell_df <- cn_node_map %>%
-        dplyr::select(id, name, layer, layer_colour) %>%
-        dplyr::left_join(ncell_df, ., by = "name") %>%
-        dplyr::mutate(across(name, ~ str_replace(.x, "\n", " ")))
-    
-    
-    measures <- list()
-    
-    # Calculate various centrality measures
-    measures$degree_centrality <- igraph::degree(graph_list$graph_obj, mode = "all")
-    measures$closeness_centrality <- igraph::closeness(graph_list$graph_obj, mode = "all")
-    measures$betweenness_centrality <- igraph::betweenness(graph_list$graph_obj, directed = TRUE)
-    
-    measures <- dplyr::bind_cols(measures) %>%
-        dplyr::mutate(name = names(measures[[1]])) %>%
-        tidyr::pivot_longer(
-            cols = -name,
-            names_to = "measure",
-            values_to = "value"
-        )
-    
-    measures <- cn_node_map %>%
-        select(id, name, layer, layer_colour) %>%
-        left_join(measures, ., by = "name") %>%
-        mutate(across(name, ~ str_replace(.x, "\n", " ")))
-    
-    measures <- ncell_df %>%
-        filter(name %in% unique(measures$name)) %>%
-        rbind(measures)
-    
-    measures$name <- factor(measures$name, levels = str_replace(cn_node_map$name, "\n", " "))
-    
-    measures$measure <- factor(
-        x = measures$measure,
-        levels = c(
-            "nCells",
-            "degree_centrality",
-            "closeness_centrality",
-            "betweenness_centrality"
-        )
+  if (sample_surgery == "prim") samples <- "Primary Samples" else samples <- "Recurrent Samples"
+
+  ncell_df <- colData(graph_list$spe_obj)[, c("delaunay_cn_clusters"), drop = FALSE] %>%
+    as.data.frame() %>%
+    dplyr::rename(cn = delaunay_cn_clusters) %>%
+    dplyr::group_by(cn) %>%
+    dplyr::summarise(n_cells = n(), .groups = "drop") %>%
+    dplyr::mutate(name = cn_map$label_map[cn]) %>%
+    dplyr::group_by(name) %>%
+    dplyr::summarise(value = sum(n_cells), .groups = "drop") %>%
+    dplyr::mutate(measure = "nCells") %>%
+    dplyr::relocate(measure, .after = name)
+
+
+  ncell_df <- cn_node_map %>%
+    dplyr::select(id, name, layer, layer_colour) %>%
+    dplyr::left_join(ncell_df, ., by = "name") %>%
+    dplyr::mutate(across(name, ~ str_replace(.x, "\n", " ")))
+
+
+  measures <- list()
+
+  # Calculate various centrality measures
+  measures$degree_centrality <- igraph::degree(graph_list$graph_obj, mode = "all")
+  measures$closeness_centrality <- igraph::closeness(graph_list$graph_obj, mode = "all")
+  measures$betweenness_centrality <- igraph::betweenness(graph_list$graph_obj, directed = TRUE)
+
+  measures <- dplyr::bind_cols(measures) %>%
+    dplyr::mutate(name = names(measures[[1]])) %>%
+    tidyr::pivot_longer(
+      cols = -name,
+      names_to = "measure",
+      values_to = "value"
     )
-    
-    
-    ggplot(measures, aes(x = value, y = forcats::fct_rev(name), , fill = layer)) +
-        geom_point(size = 18, shape = 21, color = "black") +
-        scale_fill_manual(values = cn_map$layer_colors) +
-        scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
-        facet_wrap(~measure, scales = "free_x", ncol = 1) +
-        IMCfuncs::facetted_comp_bxp_theme() +
-        labs(
-            title = glue::glue("Spatial Context Measures - {samples}"),
-            x = "",
-            y = "",
-            fill = "Layers"
-        ) +
-        theme(
-            legend.position = "right",
-            legend.title = element_text(size = 25, hjust = 0.5, face = "bold"),
-        )
+
+  measures <- cn_node_map %>%
+    select(id, name, layer, layer_colour) %>%
+    left_join(measures, ., by = "name") %>%
+    mutate(across(name, ~ str_replace(.x, "\n", " ")))
+
+  measures <- ncell_df %>%
+    filter(name %in% unique(measures$name)) %>%
+    rbind(measures)
+
+  measures$name <- factor(measures$name, levels = str_replace(cn_node_map$name, "\n", " "))
+
+  measures$measure <- factor(
+    x = measures$measure,
+    levels = c(
+      "nCells",
+      "degree_centrality",
+      "closeness_centrality",
+      "betweenness_centrality"
+    )
+  )
+
+
+  ggplot(measures, aes(x = value, y = forcats::fct_rev(name), , fill = layer)) +
+    geom_point(size = 18, shape = 21, color = "black") +
+    scale_fill_manual(values = cn_map$layer_colors) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+    facet_wrap(~measure, scales = "free_x", ncol = 1) +
+    IMCfuncs::facetted_comp_bxp_theme() +
+    labs(
+      title = glue::glue("Spatial Context Measures - {samples}"),
+      x = "",
+      y = "",
+      fill = "Layers"
+    ) +
+    theme(
+      legend.position = "right",
+      legend.title = element_text(size = 25, hjust = 0.5, face = "bold"),
+    )
 }
 
-cn_measures <- imap(graph_data, 
-                    ~graph_measures(graph_list = .x, 
-                                    sample_surgery = .y,
-                                    cn_node_map = cn_map$node_info
-                                    ))
+cn_measures <- imap(
+  graph_data, ~ graph_measures(
+    graph_list = .x,
+    sample_surgery = .y,
+    cn_node_map = cn_map$node_info
+  )
+)
 
 svglite::svglite(
-    filename = nf("prim_sc_measures.svg", io$outputs$temp_sc),
-    width = 15,
-    height = 23
+  filename = nf("prim_sc_measures.svg", io$outputs$temp_sc),
+  width = 15,
+  height = 23
 )
 print(cn_measures$prim)
 dev.off()
 
 
 svglite::svglite(
-    filename = nf("rec_sc_measures.svg", io$outputs$temp_sc),
-    width = 15,
-    height = 27
+  filename = nf("rec_sc_measures.svg", io$outputs$temp_sc),
+  width = 15,
+  height = 27
 )
 print(cn_measures$rec)
 dev.off()
