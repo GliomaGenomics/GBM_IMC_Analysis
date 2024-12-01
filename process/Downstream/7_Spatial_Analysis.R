@@ -2458,46 +2458,44 @@ print(out)
 dev.off()
 
 
-
-
-graph_measures <- function(graph_list, point_colors) {
+graph_measures <- function(graph_list, sample_surgery, cn_node_map) {
     
-    if(names(graph_data)[i] == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"   
+    if(sample_surgery == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"   
     
-    ncell_df <- colData(graph_data$prim$spe_obj)[, c("delaunay_cn_clusters"), drop = FALSE] %>%
+    ncell_df <- colData(graph_list$spe_obj)[, c("delaunay_cn_clusters"), drop = FALSE] %>%
         as.data.frame() %>%
         dplyr::rename(cn = delaunay_cn_clusters) %>%
-        group_by(cn) %>%
-        summarise(n_cells = n(), .groups = "drop") %>%
+        dplyr::group_by(cn) %>%
+        dplyr::summarise(n_cells = n(), .groups = "drop") %>%
         dplyr::mutate(name = cn_map$label_map[cn]) %>%
-        group_by(name) %>%
-        summarise(value = sum(n_cells), .groups = "drop") %>%
-        mutate(measure = "nCells") %>%
-        relocate(measure, .after = name)
+        dplyr::group_by(name) %>%
+        dplyr::summarise(value = sum(n_cells), .groups = "drop") %>%
+        dplyr::mutate(measure = "nCells") %>%
+        dplyr::relocate(measure, .after = name)
     
     
-    ncell_df <- cn_map$node_info %>%
-        select(id, name, layer, layer_colour) %>%
-        left_join(ncell_df, ., by = "name") %>%
-        mutate(across(name, ~ str_replace(.x, "\n", " ")))
+    ncell_df <- cn_node_map %>%
+        dplyr::select(id, name, layer, layer_colour) %>%
+        dplyr::left_join(ncell_df, ., by = "name") %>%
+        dplyr::mutate(across(name, ~ str_replace(.x, "\n", " ")))
     
     
     measures <- list()
     
     # Calculate various centrality measures
-    measures$degree_centrality <- igraph::degree(graph_data[[i]]$graph_obj, mode = "all")
-    measures$closeness_centrality <- igraph::closeness(graph_data[[i]]$graph_obj, mode = "all")
-    measures$betweenness_centrality <- igraph::betweenness(graph_data[[i]]$graph_obj, directed = TRUE)
+    measures$degree_centrality <- igraph::degree(graph_list$graph_obj, mode = "all")
+    measures$closeness_centrality <- igraph::closeness(graph_list$graph_obj, mode = "all")
+    measures$betweenness_centrality <- igraph::betweenness(graph_list$graph_obj, directed = TRUE)
     
-    measures <- bind_cols(measures) %>%
-        mutate(name = names(measures[[1]])) %>%
+    measures <- dplyr::bind_cols(measures) %>%
+        dplyr::mutate(name = names(measures[[1]])) %>%
         tidyr::pivot_longer(
             cols = -name,
             names_to = "measure",
             values_to = "value"
         )
     
-    measures <- cn_map$node_info %>%
+    measures <- cn_node_map %>%
         select(id, name, layer, layer_colour) %>%
         left_join(measures, ., by = "name") %>%
         mutate(across(name, ~ str_replace(.x, "\n", " ")))
@@ -2506,7 +2504,7 @@ graph_measures <- function(graph_list, point_colors) {
         filter(name %in% unique(measures$name)) %>%
         rbind(measures)
     
-    measures$name <- factor(measures$name, levels = str_replace(cn_map$node_info$name, "\n", " "))
+    measures$name <- factor(measures$name, levels = str_replace(cn_node_map$name, "\n", " "))
     
     measures$measure <- factor(
         x = measures$measure,
@@ -2536,6 +2534,29 @@ graph_measures <- function(graph_list, point_colors) {
             legend.title = element_text(size = 25, hjust = 0.5, face = "bold"),
         )
 }
+
+cn_measures <- imap(graph_data, 
+                    ~graph_measures(graph_list = .x, 
+                                    sample_surgery = .y,
+                                    cn_node_map = cn_map$node_info
+                                    ))
+
+svglite::svglite(
+    filename = nf("prim_sc_measures.svg", io$outputs$temp_sc),
+    width = 15,
+    height = 23
+)
+print(cn_measures$prim)
+dev.off()
+
+
+svglite::svglite(
+    filename = nf("rec_sc_measures.svg", io$outputs$temp_sc),
+    width = 15,
+    height = 27
+)
+print(cn_measures$rec)
+dev.off()
 
 
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
