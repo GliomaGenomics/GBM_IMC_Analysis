@@ -2457,6 +2457,87 @@ svglite::svglite(
 print(out)
 dev.off()
 
+
+
+
+graph_measures <- function(graph_list, point_colors) {
+    
+    if(names(graph_data)[i] == "prim") samples = "Primary Samples" else samples = "Recurrent Samples"   
+    
+    ncell_df <- colData(graph_data$prim$spe_obj)[, c("delaunay_cn_clusters"), drop = FALSE] %>%
+        as.data.frame() %>%
+        dplyr::rename(cn = delaunay_cn_clusters) %>%
+        group_by(cn) %>%
+        summarise(n_cells = n(), .groups = "drop") %>%
+        dplyr::mutate(name = cn_map$label_map[cn]) %>%
+        group_by(name) %>%
+        summarise(value = sum(n_cells), .groups = "drop") %>%
+        mutate(measure = "nCells") %>%
+        relocate(measure, .after = name)
+    
+    
+    ncell_df <- cn_map$node_info %>%
+        select(id, name, layer, layer_colour) %>%
+        left_join(ncell_df, ., by = "name") %>%
+        mutate(across(name, ~ str_replace(.x, "\n", " ")))
+    
+    
+    measures <- list()
+    
+    # Calculate various centrality measures
+    measures$degree_centrality <- igraph::degree(graph_data[[i]]$graph_obj, mode = "all")
+    measures$closeness_centrality <- igraph::closeness(graph_data[[i]]$graph_obj, mode = "all")
+    measures$betweenness_centrality <- igraph::betweenness(graph_data[[i]]$graph_obj, directed = TRUE)
+    
+    measures <- bind_cols(measures) %>%
+        mutate(name = names(measures[[1]])) %>%
+        tidyr::pivot_longer(
+            cols = -name,
+            names_to = "measure",
+            values_to = "value"
+        )
+    
+    measures <- cn_map$node_info %>%
+        select(id, name, layer, layer_colour) %>%
+        left_join(measures, ., by = "name") %>%
+        mutate(across(name, ~ str_replace(.x, "\n", " ")))
+    
+    measures <- ncell_df %>%
+        filter(name %in% unique(measures$name)) %>%
+        rbind(measures)
+    
+    measures$name <- factor(measures$name, levels = str_replace(cn_map$node_info$name, "\n", " "))
+    
+    measures$measure <- factor(
+        x = measures$measure,
+        levels = c(
+            "nCells",
+            "degree_centrality",
+            "closeness_centrality",
+            "betweenness_centrality"
+        )
+    )
+    
+    
+    ggplot(measures, aes(x = value, y = forcats::fct_rev(name), , fill = layer)) +
+        geom_point(size = 18, shape = 21, color = "black") +
+        scale_fill_manual(values = cn_map$layer_colors) +
+        scale_x_continuous(breaks = scales::pretty_breaks(n = 10)) +
+        facet_wrap(~measure, scales = "free_x", ncol = 1) +
+        IMCfuncs::facetted_comp_bxp_theme() +
+        labs(
+            title = glue::glue("Spatial Context Measures - {samples}"),
+            x = "",
+            y = "",
+            fill = "Layers"
+        ) +
+        theme(
+            legend.position = "right",
+            legend.title = element_text(size = 25, hjust = 0.5, face = "bold"),
+        )
+}
+
+
 # VISUALISE SPATIAL CONTEXTS ---------------------------------------------------
 io$outputs$temp_sc <- nd(
   directory_name = "spatial_contexts",
