@@ -425,6 +425,13 @@ iwalk(outplot, ~ {
 # CELLULAR NEIGHBOUR CELL STATES -----------------------------------------------
 source("process/Downstream/functions/plot_themes.R")
 
+io$outputs$temp_cn <- nd(
+    directory_name = "cellular_neighbourhoods",
+    path = io$outputs$temp_out,
+    add_timestamp = FALSE
+)
+
+
 global_cn_states <- function(cell_state_df, state, cn_cluster_col = "delaunay_cn_clusters") {
   plot_data <- cell_state_df %>%
     mutate(across(!!sym(state), ~ scale_vector(., scale_fun = "zscore")),
@@ -479,17 +486,34 @@ global_cn_states <- function(cell_state_df, state, cn_cluster_col = "delaunay_cn
     theme(plot.title = element_text(hjust = 0.5, size = 35))
 }
 
+# Code to plot the median global CN changes across the labelled CN layer
 
-walk(names(state_markers), ~ {
+# cell_states <- get_marker_exprs(state_markers, graph_data$prim$spe_obj)
+# cell_states <- cell_states[cell_states$main_anno_v2 == "Cancer", ]
+# cell_states$manual_gating <- droplevels(cell_states$manual_gating)
+# 
+# cell_states$cn_label <- cn_map$label_map[cell_states$delaunay_cn_clusters]
+# cell_states$cn_label <- str_replace(cell_states$cn_label, "\n", " ")
+# 
+# cell_states$cn_label <- factor(cell_states$cn_label, 
+#                                levels = str_replace(cn_map$node_info$name, "\n", " ")
+# )
+
+gm_cn_states <- map(names(state_markers), ~ {
+    global_cn_states(cell_states, .x, cn_cluster_col = "cn_label")
+})
+names(gm_cn_states) <- names(state_markers)
+
+iwalk(gm_cn_states, ~ {
   svglite::svglite(
-    filename = nf(glue::glue("{.x}_global_cn_cell_states.png"), io$outputs$out_dir),
+    filename = nf(glue::glue("{.y}_global_cn_cell_states.svg"), io$outputs$temp_cn),
     width = 10,
     height = 10
   )
-  print(global_cn_states(cell_states, .x))
+  print(.x)
+
   dev.off()
 })
-
 
 surgery_cn_states <- function(cell_state_df, state,
                               cn_cluster_col = "delaunay_cn_clusters",
@@ -538,7 +562,8 @@ surgery_cn_states <- function(cell_state_df, state,
     ) +
     geom_hline(
       aes(yintercept = global_median, colour = "Global Median"),
-      linetype = "dashed", linewidth = 1
+      linetype = "dashed", 
+      linewidth = 1
     ) +
     coord_flip() +
     facet_wrap(facets = vars(!!sym(cn_cluster_col)), scales = "free_y", ncol = 1) +
@@ -565,17 +590,23 @@ surgery_cn_states <- function(cell_state_df, state,
     )
 }
 
-walk(names(state_markers), ~ {
+
+surgery_cn_states <- map(names(state_markers), ~ {
+    
+    surgery_cn_states(cell_states, .x, cn_cluster_col = "cn_label")
+
+})
+names(surgery_cn_states) <- names(state_markers)
+
+iwalk(surgery_cn_states, ~ {
   svglite::svglite(
-    filename = nf(glue::glue("{.x}_surgery_cn_states.svg"), io$outputs$out_dir),
-    width = 12,
-    height = 22
+    filename = nf(glue::glue("{.y}_surgery_cn_states.svg"), io$outputs$temp_cn),
+    width = 15,
+    height = 20
   )
-  print(surgery_cn_states(cell_states, .x))
+  print(.x)
   dev.off()
 })
-
-
 
 # CLASSIFYING CELL STATES ------------------------------------------------------
 
